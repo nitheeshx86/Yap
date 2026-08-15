@@ -1852,14 +1852,13 @@ async function groqChat(system, user, maxTokens = 900) {
   return JSON.parse(txt.slice(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
 }
 
-/* ------------------------- Sarvam, via the proxy ------------------------- */
+/* --------------------------- Sarvam, same-origin -------------------------- */
+/* Sarvam's key lives server-side (app/api/sarvam/*), mirroring the Groq setup
+   above — the browser only ever talks to our own /api routes, never
+   api.sarvam.ai directly. */
 
-function sarvamBase() {
-  const p = proxyUrl();                       // e.g. http://localhost:8787/api/claude
-  if (!p) return "";
-  return p.replace(/\/api\/claude$/, "/api/sarvam");
-}
-const sarvamReady = () => !!sarvamBase();
+function sarvamBase() { return "/api/sarvam"; }
+const sarvamReady = () => true;   // the key lives on the server; failures are caught per-call
 
 /** Transcribe a recorded clip. Returns the words in the language they were
  *  spoken in — YAP analyses the original, never a translation.
@@ -2010,7 +2009,8 @@ function languageDirective(spoken) {
 
   if (reply && reply !== "en-IN") {
     const r = langName(reply);
-    lines.push(`WRITE YOUR REPLY IN ${r.toUpperCase()}: every field, including short labels. Natural spoken ${r}, not translated-sounding ${r}.`);
+    lines.push(`WRITE YOUR REPLY IN ${r.toUpperCase()}: every field VALUE, including short labels. Natural spoken ${r}, not translated-sounding ${r}.`);
+    lines.push(`The JSON keys in the schema above are not part of the reply — keep every key exactly as given, in English, unchanged, with the exact same structure (same nesting, same arrays). Only the text inside the values moves to ${r}.`);
     lines.push(`If the speaker mixed ${r} with English, mix the same way they did — that is how they actually talk, and flattening it into pure ${r} or pure English would misrepresent them.`);
     lines.push(`Quote their own words verbatim, in whatever language they said them. Never translate a quotation.`);
   } else if (heard && heard !== "en-IN") {
@@ -2153,6 +2153,11 @@ function useMic() {
   const [sarvam, setSarvam] = useState(null);        // {state, text, language}
   const sarvamRef = useRef(null); sarvamRef.current = sarvam;
   const sarvamPendingRef = useRef(false);
+  // MediaRecorder.stop() is async under the hood — the native "stop" event
+  // (and the onstop handler that decides whether an accuracy pass even
+  // starts) can land a tick or more later. settled() must span that gap too,
+  // or it resolves before sarvamPendingRef has ever been set.
+  const recorderStoppingRef = useRef(false);
   const finalTextRef = useRef("");
   const [devices, setDevices] = useState([]);
   const [deviceId, setDeviceId] = usePersistedRef("micDevice", "");
@@ -2161,6 +2166,7 @@ function useMic() {
 
   const rec = useRef(null), stream = useRef(null), ctx = useRef(null), raf = useRef(null);
   const recorder = useRef(null), chunks = useRef([]);
+  const session = useRef(0);
   const fin = useRef(""), want = useRef(false), voiced = useRef(0);
   const restarts = useRef(0), lastRestart = useRef(0);
   const confidences = useRef([]);
@@ -2188,8 +2194,16 @@ function useMic() {
       try { rec.current.stop(); } catch (e) { /* already stopped */ }
     }
     if (recorder.current) {
-      recorder.current.ondataavailable = null; recorder.current.onstop = null;
-      try { if (recorder.current.state !== "inactive") recorder.current.stop(); } catch (e) { /* already stopped */ }
+      // onstop is deliberately left attached: it's what turns the tape into a
+      // blob and kicks off the accuracy pass, and that has to run on the
+      // ordinary "recording finished" stop, not just survive it. A stale
+      // instance's onstop is guarded by the session token instead (below),
+      // so it can't write into a new session's refs.
+      recorder.current.ondataavailable = null;
+      if (recorder.current.state !== "inactive") {
+        recorderStoppingRef.current = true;
+        try { recorder.current.stop(); } catch (e) { recorderStoppingRef.current = false; }
+      }
     }
     cancelAnimationFrame(raf.current);
     if (stream.current) stream.current.getTracks().forEach((t) => t.stop());
@@ -2229,6 +2243,8 @@ function useMic() {
     // the transcript came back duplicated or interleaved (Camera Practice's
     // "another take" was the clearest case of this)
     if (want.current || rec.current || recorder.current || stream.current) stop();
+    session.current += 1;
+    const mySession = session.current;
     setError(null); setNotice(null);
     fin.current = ""; finalTextRef.current = ""; setFinalText(""); setInterim("");
     // a previous take's multilingual result must never be scored on this one
@@ -2293,6 +2309,13 @@ function useMic() {
         recorder.current = new MediaRecorder(s, mime ? { mimeType: mime, audioBitsPerSecond: 32000 } : undefined);
         recorder.current.ondataavailable = (e) => { if (e.data && e.data.size) chunks.current.push(e.data); };
         recorder.current.onstop = () => {
+          // the handler has now run and settled() no longer needs to wait on
+          // this account — whether or not it goes on to start an accuracy
+          // pass is decided below, via sarvamPendingRef
+          recorderStoppingRef.current = false;
+          // guards against a stale recorder's stop event landing after a new
+          // session has already begun (see the comment on `stop`, above)
+          if (session.current !== mySession) return;
           if (!chunks.current.length) return;
           const blob = new Blob(chunks.current, { type: chunks.current[0].type || "audio/webm" });
           const secs = Math.round((Date.now() - startedAt.current) / 1000);
@@ -2481,12 +2504,17 @@ function useMic() {
       return { text: live, source: "live", language: null };
     },
     /* Resolves once Sarvam has finished, so a report never scores the weaker
-       transcript just because the upload was still in flight. */
+       transcript just because the upload was still in flight. Also spans the
+       gap between mic.stop() returning and MediaRecorder's own async "stop"
+       event actually landing — without that, this used to resolve before
+       sarvamPendingRef was ever set, and the accuracy pass never got waited
+       on at all. */
     settled: (ms = 6000) => new Promise((resolve) => {
-      if (!sarvamPendingRef.current) return resolve();
+      const pending = () => recorderStoppingRef.current || sarvamPendingRef.current;
+      if (!pending()) return resolve();
       const started = Date.now();
       const tick = setInterval(() => {
-        if (!sarvamPendingRef.current || Date.now() - started > ms) {
+        if (!pending() || Date.now() - started > ms) {
           clearInterval(tick); resolve();
         }
       }, 120);
@@ -2856,14 +2884,6 @@ function LanguageBar({ mic }) {
             YAP scores it as one answer, not as a mistake. Your words are analysed in the language
             you said them; only the coaching is translated.
           </p>
-          {!sarvamReady() && (
-            <div className="tip" style={{ marginTop: 10 }}>
-              Indian-language transcription runs on the server. Start it with a Sarvam key
-              (<b>npm install sarvamai</b> then <b>SARVAM_API_KEY=… node server.js</b>) and point
-              YAP's proxy at it. Without that, live transcription stays English-first — the timer,
-              crutch-word counting, structure, pacing and every score still work unchanged.
-            </div>
-          )}
         </>
       )}
     </div>
@@ -7197,8 +7217,7 @@ function GroupDiscussion({ mic, onFinish, lib }) {
                 <button className="btn go" onClick={cutIn}>Cut in</button>
               </>
             )}
-            <button className="btn" onClick={() => { const v = !voice; setVoice(v); if (!v) stopSpeaking(); }}
-              title={sarvamReady() ? "" : "Voices need the Sarvam proxy"}>
+            <button className="btn" onClick={() => { const v = !voice; setVoice(v); if (!v) stopSpeaking(); }}>
               {voice ? "Mute panel" : "Panel voices"}
             </button>
             <button className="btn" onClick={finish}>End round</button>
