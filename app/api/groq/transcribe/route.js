@@ -22,12 +22,20 @@ export async function POST(request) {
     return NextResponse.json({ error: "missing 'file' field" }, { status: 400 });
   }
 
+  // Without a nudge, Whisper doesn't just drop "um"/"uh" — it quietly
+  // mishears them as real words ("um" -> "I'm", "uh" -> "all"), which slips
+  // straight past the Ah-Counter undetected. Priming with a disfluent-style
+  // prompt keeps them verbatim, the same reason the Sarvam path below asks
+  // for "verbatim" mode.
+  const VERBATIM_PROMPT = "Um, so, uh, like, you know — a raw verbatim transcript, keeping every filler word, false start and repeated word exactly as spoken, umm.";
+
   const fd = new FormData();
   fd.append("file", file, "speech.webm");
   fd.append("model", GROQ_STT_MODEL);
   fd.append("language", "en");
   fd.append("response_format", "verbose_json");
   fd.append("temperature", "0");
+  fd.append("prompt", VERBATIM_PROMPT);
 
   let res;
   try {
