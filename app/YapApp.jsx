@@ -174,7 +174,6 @@ const CSS = `
 @keyframes drift{to{transform:translateY(102vh) rotate(540deg);opacity:0}}
 .hl-empty{background:rgba(167,159,212,.16);border-bottom:2.5px solid #a79fd4;border-radius:4px;padding:0 3px}
 .hl-wordy{background:rgba(255,159,69,.16);border-bottom:2.5px solid #ff9f45;border-radius:4px;padding:0 3px}
-.hl-passive{background:rgba(86,200,245,.16);border-bottom:2.5px solid #56c8f5;border-radius:4px;padding:0 3px}
 .hl-repeat{background:rgba(157,128,255,.16);border-bottom:2.5px dashed var(--moss);border-radius:4px;padding:0 3px}
 .legend{display:flex;flex-wrap:wrap;gap:10px;font-family:var(--mon);font-size:10px;color:var(--ink60);margin-top:12px}
 .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:-2px;border:1.5px solid var(--line)}
@@ -480,6 +479,10 @@ const ACADEMIC = /(tion|sion|ment|ity|ance|ence|ive|ous|ate|ise|ize|able|ible|is
 const HEDGES = ["kind of", "sort of", "i guess", "i suppose", "maybe", "i think", "probably", "perhaps", "somewhat", "a bit", "a little bit", "i feel like", "or something", "i mean"];
 const HARD_FILLERS = ["um", "uh", "erm", "uhh", "umm", "hmm", "er", "ah", "you know", "matlab"];
 const SOFT_FILLERS = ["like", "actually", "basically", "literally", "so", "well", "right", "okay", "yeah", "just", "na"];
+// the actual non-lexical sounds the Ah-Counter role is named for — everything
+// else findFillers tags "filler" (you know, matlab, like, so...) is a crutch
+// word, not a hesitation sound, and gets shown as its own group
+const AH_SOUNDS = new Set(["um", "umm", "uh", "uhh", "erm", "er", "hmm", "ah"]);
 
 const STANCE = ["i think", "i believe", "in my view", "in my opinion", "i'd argue", "i would argue", "my view is", "i disagree", "i agree", "the answer is", "yes", "no", "personally"];
 const CONNECT = ["because", "however", "although", "whereas", "therefore", "for example", "for instance", "on the other hand", "that said", "but", "which means", "as a result", "in contrast", "firstly", "secondly", "moreover"];
@@ -539,6 +542,13 @@ function findFillers(text, lang) {
   const extra = (typeof FILLERS_BY_LANG !== "undefined" && lang && FILLERS_BY_LANG[lang])
     ? FILLERS_BY_LANG[lang]
     : (typeof ALL_INDIC_FILLERS !== "undefined" ? ALL_INDIC_FILLERS : []);
+  // words that are only a filler when they're part of a hesitation cluster —
+  // see the comment on AMBIGUOUS_FILLERS_BY_LANG for why these can't be
+  // matched unconditionally the way "matlab" or "arre" can.
+  const ambiguous = (typeof AMBIGUOUS_FILLERS_BY_LANG !== "undefined" && lang && AMBIGUOUS_FILLERS_BY_LANG[lang])
+    ? AMBIGUOUS_FILLERS_BY_LANG[lang]
+    : (typeof ALL_AMBIGUOUS_INDIC !== "undefined" ? ALL_AMBIGUOUS_INDIC : []);
+  const isFillerish = (x) => !!x && (HARD_FILLERS.includes(x) || extra.includes(x) || ambiguous.includes(x) || SOFT_FILLERS.includes(x));
   const found = [];
 
   const add = (kind, phrase, i, len) => {
@@ -567,7 +577,24 @@ function findFillers(text, lang) {
     if (taken.has(i)) return;
     const prev = toks[i - 1], next = toks[i + 1];
 
+    // "toh" also chains an "agar" ("if") clause as a real conjunction —
+    // "agar tum aaoge toh main khush hounga" isn't hesitation, it's grammar.
+    if (w === "toh" && lang === "hi-IN") {
+      const back = toks.slice(Math.max(0, i - 12), i);
+      if (back.some((t) => t === "agar" || t === "yadi" || t === "अगर" || t === "यदि")) return;
+      add("filler", w, i, 1); return;
+    }
+
     if (HARD_FILLERS.includes(w) || extra.includes(w)) { add("filler", w, i, 1); return; }
+
+    // an ambiguous particle ("accha" = good/I-see, "haan" = yes, "sari" = okay)
+    // only counts once it's next to another filler-type word — the shape of an
+    // actual hesitation cluster, not a sentence that happens to use the word.
+    if (ambiguous.includes(w)) {
+      if (isFillerish(prev) || isFillerish(next)) { add("filler", w, i, 1); }
+      return;
+    }
+
     if (!SOFT_FILLERS.includes(w)) return;
 
     // Each soft word is only a filler in the right position.
@@ -771,32 +798,32 @@ function findRepetition(text) {
 
 /* -- stumbles: doubled words and restarts -------------------------------- */
 
+// Words that are fine said twice on purpose ("no no", "very very tired") —
+// shared with segmentSpeech's own repeat check below, so the two don't drift.
+const STUMBLE_OK_REPEAT = new Set(["that", "had", "very", "no", "ha"]);
+
 function findStumbles(text) {
   const toks = words0(text);
   const out = [];
   for (let i = 1; i < toks.length; i++) {
-    if (toks[i] === toks[i - 1] && !["that", "had", "very", "no", "ha"].includes(toks[i])) {
+    if (toks[i] === toks[i - 1] && !STUMBLE_OK_REPEAT.has(toks[i])) {
       out.push({ phrase: toks[i] + " " + toks[i], at: i });
     }
   }
   return out;
 }
 
-/* -- segment punctuation-less speech into units -------------------------- */
-
+/* -- segment spontaneous, multilingual speech into units ------------------ */
+/* Thin wrapper kept for every existing call site: segmentSpeech (defined
+   further down, once the discourse-marker sets it needs exist) does the
+   actual boundary reasoning and returns classified units; this just hands
+   back the plain text of each one, exactly as before, so nothing downstream
+   has to change shape. */
 function segment(text) {
-  const hard = text.split(/[.!?]+/).map((s) => s.trim()).filter(Boolean);
-  if (hard.length > 1) return hard;
-  const toks = text.split(/\s+/).filter(Boolean);
-  const breakers = new Set(["and", "but", "so", "because", "however", "then", "also", "although", "which"]);
-  const units = []; let cur = [];
-  toks.forEach((w) => {
-    const clean = w.toLowerCase().replace(/[^a-z']/g, "");
-    if (breakers.has(clean) && cur.length >= 7) { units.push(cur.join(" ")); cur = [w]; }
-    else cur.push(w);
-  });
-  if (cur.length) units.push(cur.join(" "));
-  return units.length ? units : [text];
+  const rich = (typeof segmentSpeech === "function") ? segmentSpeech(text) : null;
+  if (rich && rich.length) return rich.map((u) => u.text);
+  const t = (text || "").trim();
+  return t ? [t] : [];
 }
 
 /* ==========================================================================
@@ -853,23 +880,6 @@ const REDUNDANT = [
   ["ask a question", "ask"], ["brief summary", "summary"], ["mutual cooperation", "cooperation"],
 ];
 
-/* Passive constructions. Some are fine; the flag is a prompt to check, not a rule. */
-const PAST_PARTICIPLES = "given|taken|seen|made|done|shown|held|written|built|brought|found|kept|left|told|thought|caught|taught|known|used|based|called|considered|described|expected|needed|required|created|provided|reported|regarded|treated|handled|managed|decided|chosen|driven|forced|placed|raised|reduced|removed|replaced|solved|started|stopped|viewed";
-
-function findPassive(text) {
-  const re = new RegExp(`\\b(is|are|was|were|be|been|being|am|get|gets|got)\\s+(\\w+ed|${PAST_PARTICIPLES})\\b(\\s+by\\b)?`, "gi");
-  const out = [];
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    const phrase = m[0].trim();
-    // "is interested", "is tired", "was excited" are adjectives, not passives
-    if (/\b(interested|tired|excited|worried|surprised|bored|confused|pleased|scared|involved|related|supposed|used to)\b/i.test(phrase)) continue;
-    const s = Math.max(0, m.index - 24), e = Math.min(text.length, m.index + phrase.length + 24);
-    out.push({ phrase, hasAgent: !!m[3], ctx: text.slice(s, e).trim() });
-  }
-  return out;
-}
-
 function findEmptyWords(text) {
   const low = " " + text.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ") + " ";
   const out = [];
@@ -915,11 +925,19 @@ function findRepeatedIdeas(text) {
     .sort((a, b) => b.n - a.n);
 }
 
-/* Sentences a listener can't hold in their head. */
+/* Sentences a listener can't hold in their head. Clause-joins used to be
+   counted from an English-only word list, so this never fired on a long
+   Tamil or Hindi answer even when it genuinely rambled. SUBORD_ANY/COORD_ANY
+   (defined with the segmentation engine below) cover the same role across
+   every supported language, so this counts real joins wherever they're said. */
 function findLongSentences(units) {
+  const markers = (typeof SUBORD_ANY !== "undefined" && typeof COORD_ANY !== "undefined")
+    ? SUBORD_ANY.concat(COORD_ANY)
+    : [/\b(and|but|so|because|which|that|when|while|although|however|then)\b/i];
   return units.map((u, i) => {
     const w = (u.match(/\S+/g) || []).length;
-    const clauses = (u.toLowerCase().match(/\b(and|but|so|because|which|that|when|while|although|however|then)\b/g) || []).length;
+    const clauses = markers.reduce((n, re) =>
+      n + (u.match(new RegExp(re.source, "gi")) || []).length, 0);
     return { i, text: u, words: w, clauses };
   }).filter((u) => u.words >= 30 || u.clauses >= 5)
     .sort((a, b) => b.words - a.words);
@@ -944,11 +962,18 @@ function hasVerb(sentence) {
   return false;
 }
 
-function findTangled(units) {
+/* rich is the classified output of segmentSpeech, index-aligned with units
+   (both are derived from the same text by the same function, so unit k and
+   rich[k] are the same span). A unit the segmenter already recognised as an
+   abandoned or self-corrected construction isn't a listener losing the
+   thread — it's the speaker fixing course, which Fluency accounts for
+   separately — so it's excluded here rather than double-counted as tangled. */
+function findTangled(units, rich) {
   const out = [];
   units.forEach((u, i) => {
     const w = (u.match(/\S+/g) || []).length;
     if (w < 4) return;
+    if (rich && rich[i] && rich[i].kind === "ABANDONED_CONSTRUCTION") return;
     const clauses = (u.toLowerCase().match(/\b(and|but|so|because|which|that|when|while|although|however)\b/g) || []).length;
     if (!hasVerb(u)) { out.push({ i, text: u, why: "no clear verb — this never becomes a statement" }); return; }
     if (clauses >= 6) { out.push({ i, text: u, why: `${clauses} joins in one breath — the thread is lost before the end` }); return; }
@@ -983,11 +1008,13 @@ function tightenSentence(sentence) {
 }
 
 function concisenessReport(text, units) {
+  // Recomputed from the same text, so it lines up index-for-index with
+  // units — segmentSpeech is deterministic on identical input.
+  const rich = (typeof segmentSpeech === "function") ? segmentSpeech(text) : null;
   const empty = findEmptyWords(text);
   const wordy = findWordy(text);
-  const passive = findPassive(text);
   const longOnes = findLongSentences(units);
-  const tangled = findTangled(units);
+  const tangled = findTangled(units, rich);
   const repeatedIdeas = findRepeatedIdeas(text);
 
   const wc = words0(text).length;
@@ -1018,7 +1045,6 @@ function concisenessReport(text, units) {
     - wastePct * 2.2
     - longOnes.length * 9
     - tangled.length * 11
-    - passive.length * 4
     - repeatedIdeas.length * 5
   )));
 
@@ -1028,7 +1054,7 @@ function concisenessReport(text, units) {
   else if (score >= 62) line = `Reasonably tight, but roughly ${Math.round(wastePct)}% of your words could go without changing your meaning${longOnes.length ? `, and ${longOnes.length} sentence${longOnes.length === 1 ? "" : "s"} ran long` : ""}.`;
   else line = `You're using more words than your ideas need — around ${Math.round(wastePct)}% could be cut${longOnes.length ? `, with ${longOnes.length} over-long sentence${longOnes.length === 1 ? "" : "s"}` : ""}${tangled.length ? ` and ${tangled.length} that a listener would lose` : ""}.`;
 
-  return { empty, wordy, passive, longOnes, tangled, repeatedIdeas, rewrites: rewrites.slice(0, 4),
+  return { empty, wordy, longOnes, tangled, repeatedIdeas, rewrites: rewrites.slice(0, 4),
     emptyCount, wordyCount, wastedWords, wastePct, score, line };
 }
 
@@ -1080,8 +1106,169 @@ const CLOSERS_ANY = [
   /\b(so overall|to conclude|in short)\b/i,
 ];
 
-/* Conciseness for non-English speech. The English rules (passive voice, wordy
-   phrase swaps, filler-word lists) don't transfer, so this measures only what
+/* ==========================================================================
+   SPEECH SEGMENTATION
+   Where units used to come from ASR punctuation (or, failing that, a short
+   list of English breaker words), a boundary is now a decision weighed from
+   several independent signals — closing/discourse markers, subordination,
+   accumulated length, self-correction — rather than a single rule. Nothing
+   below treats "the language changed" as evidence of anything: a clause that
+   opens in English and finishes in Tamil is never split for that reason
+   alone, because no signal here even looks at script or vocabulary origin —
+   every marker set is checked against the window regardless of which
+   language it belongs to. ASR punctuation still counts, but as one signal
+   among several, and it is the first one a subordinate clause overrides —
+   "...was because. Because of that..." never splits at the period. */
+
+/* "because"/"for example"-type: opens a clause that finishes the thought
+   already in progress. A boundary is never placed where one of these
+   begins, even across a punctuation mark. "but/so/therefore"-type: can
+   start a genuinely new unit, but only once the clause behind it is
+   already substantial. Both are pulled from the same vetted vocabulary as
+   STANCE_ANY/CONNECT_ANY/CLOSERS_ANY above, split by grammatical role. */
+const SUBORD_ANY = [
+  /\b(because|since|although|though|while|unless|whereas|if|when|that|which|who|for example|for instance)\b/i,
+  /(kyunki|kyonki|क्योंकि|udaharan|उदाहरण|agar|अगर|jab\b|जब)/i,
+  /(ஏனென்றால்|உதாரணமாக)/i,
+  /(endukante|ఉదాహరణకు)/i,
+  /(ಏಕೆಂದರೆ)/i,
+  /(കാരണം)/i,
+  /(\bकारण\b)/i,
+  /(কারণ)/i,
+  /(કારણ કે)/i,
+  /(ਕਿਉਂਕਿ)/i,
+];
+const COORD_ANY = [
+  /\b(but|however|so|yet|and|then)\b/i,
+  /(lekin|लेकिन|magar|मगर|isliye|इसलिए)/i,
+  /(ஆனால்|அதனால்)/i,
+  /(కానీ|అందుకే)/i,
+  /(ಆದರೆ|ಆದ್ದರಿಂದ)/i,
+  /(പക്ഷേ|അതുകൊണ്ട്)/i,
+  /(\bपण\b|म्हणून)/i,
+  /(কিন্তু|তাই)/i,
+  /(પણ|તેથી)/i,
+  /(ਪਰ|ਇਸ ਲਈ)/i,
+];
+/* A speaker announcing their own restart. Kept to phrasing this confident
+   about — "matlab"/"yaani" are already established discourse markers
+   elsewhere in this file, not a new guess. */
+const SELF_CORRECTION_ANY = [
+  /\b(i mean|actually|sorry|no wait|wait,? i mean|what i meant|let me rephrase|or rather)\b/i,
+  /(matlab|मतलब|yaani|यानी)/i,
+];
+
+const SEG_SAFETY_MAX = 42;      // tokens — a ceiling so unpunctuated speech
+                                  // in any language still gets segmented
+const SEG_MIN_FOR_COORD = 6;     // a coordinator only counts once the clause
+                                  // behind it is long enough to be its own unit
+
+function segWindowAfter(toks, i, fwd) {
+  return toks.slice(i + 1, Math.min(toks.length, i + 1 + fwd)).join(" ");
+}
+
+/* True only if one of the patterns matches starting at the very first token
+   of the window — i.e. the marker begins right after the candidate boundary,
+   not merely somewhere within the lookahead. Without this anchor, a closer
+   like "so overall" three tokens further on would make every position in
+   between look like a boundary too, splitting the unit one word at a time. */
+function startsWithMarker(window, patterns) {
+  return patterns.some((re) => {
+    const m = new RegExp(re.source, re.flags.replace(/g/g, "")).exec(window);
+    return m && m.index === 0;
+  });
+}
+
+/* text -> [{ text, kind, confidence, endReason, wc }].
+   kind is the subset of the full spoken-unit taxonomy this heuristic engine
+   can back with real evidence:
+     COMPLETE_SENTENCE        — closes on punctuation with no other signal contradicting it
+     THOUGHT_GROUP_END        — closes on a coordinator or a new stance-opener
+     COMMUNICATIVE_UNIT_END   — closes on a closing/conclusion marker
+     ABANDONED_CONSTRUCTION   — cut short by the speaker's own restart or a stutter-repeat
+     HESITATION               — the unit is nothing but filler/hedge tokens
+     UNCERTAIN_BOUNDARY       — no real signal fired; split only because the
+                                 unit hit the safety ceiling, so treat it as
+                                 a rough boundary, not a confident one
+   Categories the spec names but this engine has no honest way to tell apart
+   from these — INTERRUPTION (needs a second speaker's audio), LIST_CONTINUATION
+   and TOPIC_SHIFT (need real discourse parsing) — are not invented; they fall
+   into UNCERTAIN_BOUNDARY rather than being guessed at. */
+function segmentSpeech(text) {
+  const raw = (text || "").trim();
+  if (!raw) return [];
+  const toks = raw.split(/\s+/).filter(Boolean);
+  if (!toks.length) return [];
+
+  const stripPunct = (w) => w.replace(/^[^\p{L}\p{M}\d]+|[^\p{L}\p{M}\d]+$/gu, "");
+  const cleanToks = toks.map((w) => stripPunct(w).toLowerCase());
+  const fillerWord = (w) => HARD_FILLERS.includes(w) || HEDGES.includes(w) || SOFT_FILLERS.includes(w) ||
+    (typeof ALL_INDIC_FILLERS !== "undefined" && ALL_INDIC_FILLERS.includes(w));
+
+  const units = [];
+  let start = 0;
+
+  const flush = (end, reason, confidence) => {
+    if (end < start) return;
+    const unitToks = toks.slice(start, end + 1);
+    const unitText = unitToks.join(" ");
+    const wc = unitToks.length;
+    const cleanUnit = unitToks.map((w) => stripPunct(w).toLowerCase()).filter(Boolean);
+    const allFiller = wc > 0 && cleanUnit.every(fillerWord);
+    let kind;
+    if (allFiller) kind = "HESITATION";
+    else if (reason === "selfcorrect" || reason === "repeat") kind = "ABANDONED_CONSTRUCTION";
+    else if (reason === "closer") kind = "COMMUNICATIVE_UNIT_END";
+    else if (reason === "stance" || reason === "coord") kind = "THOUGHT_GROUP_END";
+    else if (reason === "punct") kind = "COMPLETE_SENTENCE";
+    // The speaker simply stopped talking here — real evidence the utterance
+    // is over, and stronger than an arbitrary length cutoff. This is what
+    // classifies the finished construction after a restart, e.g. "...actually,
+    // I joined because I wanted to become more confident" — that isn't
+    // uncertain, it's the thing that should be graded on its own merits.
+    else if (reason === "end") kind = "COMPLETE_SENTENCE";
+    else kind = "UNCERTAIN_BOUNDARY";  // reason === "maxlen": a forced cut, not a real one
+    units.push({ text: unitText, kind, confidence, endReason: reason, wc });
+    start = end + 1;
+  };
+
+  for (let i = 0; i < toks.length; i++) {
+    const unitLen = i - start + 1;
+    const hasNext = i + 1 < toks.length;
+    const nextClean = hasNext ? cleanToks[i + 1] : "";
+
+    // The speaker signalling their own restart overrides everything else —
+    // this is direct evidence, not an inference from a pause or a word list.
+    if (hasNext && unitLen >= 2 && startsWithMarker(segWindowAfter(toks, i, 4), SELF_CORRECTION_ANY)) {
+      flush(i, "selfcorrect", 0.7); continue;
+    }
+    if (hasNext && unitLen >= 2 && nextClean && nextClean === cleanToks[i] && !STUMBLE_OK_REPEAT.has(cleanToks[i])) {
+      flush(i, "repeat", 0.55); continue;
+    }
+    // Safety valve before the subordinate check, so a long unpunctuated
+    // stretch that happens to keep opening dependent clauses still segments
+    // instead of becoming one giant unit.
+    if (unitLen >= SEG_SAFETY_MAX) { flush(i, "maxlen", 0.3); continue; }
+    // Never split into a subordinate clause — the thought isn't finished,
+    // whatever else the window says. This is the one place linguistic
+    // structure is allowed to override punctuation outright, per spec.
+    if (hasNext && SUBORD_ANY.some((re) => re.test(toks[i + 1]))) continue;
+
+    if (hasNext) {
+      const after = segWindowAfter(toks, i, 4);
+      if (startsWithMarker(after, CLOSERS_ANY)) { flush(i, "closer", 0.85); continue; }
+      if (startsWithMarker(after, STANCE_ANY)) { flush(i, "stance", 0.65); continue; }
+      if (unitLen >= SEG_MIN_FOR_COORD && COORD_ANY.some((re) => re.test(toks[i + 1]))) { flush(i, "coord", 0.7); continue; }
+      if (/[.!?]$/.test(toks[i])) { flush(i, "punct", 0.55); continue; }
+    }
+  }
+  if (start <= toks.length - 1) flush(toks.length - 1, "end", 0.6);
+
+  return units;
+}
+
+/* Conciseness for non-English speech. The English rules (wordy phrase swaps,
+   filler-word lists) don't transfer, so this measures only what
    is genuinely language-neutral: sentence length, repeated ideas, and how much
    of the answer is spent circling. It returns the same shape as the English
    report so every consumer downstream keeps working untouched. */
@@ -1098,7 +1285,7 @@ function concisenessNeutral(text, units, repeats) {
     : score >= 78
       ? "Tight. Your sentences stay a length a listener can hold."
       : `${longOnes.length ? `${longOnes.length} sentence${longOnes.length === 1 ? "" : "s"} ran long` : "Sentence length is fine"}${repeatedIdeas.length ? `, and ${repeatedIdeas.length} idea${repeatedIdeas.length === 1 ? "" : "s"} came back around` : ""}. Word-level tightening is only checked for English, so this is the shape of your answer rather than its wording.`;
-  return { empty: [], wordy: [], passive: [], longOnes, tangled: [], repeatedIdeas,
+  return { empty: [], wordy: [], longOnes, tangled: [], repeatedIdeas,
     rewrites: [], emptyCount: 0, wordyCount: 0, wastedWords: 0, wastePct: 0, score, line,
     neutral: true };
 }
@@ -1143,8 +1330,16 @@ function analyse(text, seconds, mode, declaredLang) {
   const vague = isEnglish ? findVagueness(clean) : [];
   const repeats = findRepetition(clean);
   const stumbles = findStumbles(clean);
-  const units = segment(clean);
+  // The full classified segmentation — where units come from, not just what
+  // they say. units stays the plain-text array every existing consumer
+  // expects; richUnits carries the same spans with a boundary reason,
+  // confidence and category (self-correction, hesitation, closer...) for
+  // anything downstream that wants to reason about completion rather than
+  // just word-count.
+  const richUnits = typeof segmentSpeech === "function" ? segmentSpeech(clean) : [];
+  const units = richUnits.length ? richUnits.map((u) => u.text) : segment(clean);
   const avgUnit = units.length ? Math.round(wc / units.length) : wc;
+  const abandonedUnits = richUnits.filter((u) => u.kind === "ABANDONED_CONSTRUCTION");
   const concise = isEnglish
     ? concisenessReport(clean, units)
     : concisenessNeutral(clean, units, repeats);
@@ -1211,6 +1406,7 @@ function analyse(text, seconds, mode, declaredLang) {
     grammar, nonWords, register, vague, repeats, stumbles,
     vagueCount, registerCount, sophistication: Math.round(sophistication * 100),
     units, unitCount: units.length, avgUnit, concise, clarity100,
+    richUnits, abandonedCount: abandonedUnits.length,
     hasStance, connectives, hasClose,
     variety, fluency, pace, range, structure, accuracy, overall,
   };
@@ -1252,19 +1448,38 @@ function fmt(s) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/* The Ah-Counter. Tallies each crutch and reports the rate, as they do aloud. */
+/* The Ah-Counter. The classic Toastmasters role: names every "ah", "um" and
+   "uh" by count first — that's the seat's actual namesake — then the other
+   crutch words and hedges it also listens for, kept as a clearly separate
+   group rather than folded into one undifferentiated tally. */
 function ahReport(r) {
   const tally = {};
   r.fillers.forEach((f) => { tally[f.phrase] = (tally[f.phrase] || 0) + 1; });
   const rows = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+  const sounds = rows.filter(([w]) => AH_SOUNDS.has(w));
+  const crutches = rows.filter(([w]) => !AH_SOUNDS.has(w));
+  const soundTotal = sounds.reduce((s, [, n]) => s + n, 0);
   const total = r.fillerCount + r.hedgeCount + r.crutchCount;
+  const crutchTotal = total - soundTotal;
   const per = r.wc ? (total / r.wc) * 100 : 0;
+  const soundPer = r.wc ? (soundTotal / r.wc) * 100 : 0;
+
   let line;
-  if (total === 0) line = "Not one crutch word. That's rare and it's the single biggest thing that makes someone sound prepared.";
-  else if (per < 3) line = `${total} in ${r.wc} words — about ${per.toFixed(1)}%. Below three percent is where a listener stops noticing. You're there.`;
-  else if (per < 6) line = `${total} in ${r.wc} words, roughly ${per.toFixed(1)}%. Audible but not distracting. They cluster where you change direction — that's the place to swap in a half-second of silence.`;
-  else line = `${total} in ${r.wc} words, about ${per.toFixed(1)}%. That's high enough that a panel hears the crutches instead of the argument. Pick your single worst one and hunt only that for a week.`;
-  return { rows, total, per, line };
+  if (total === 0) {
+    line = "Not one ah, um or uh — and no crutch words either. That's rare, and it's the single biggest thing that makes someone sound prepared.";
+  } else if (soundTotal === 0) {
+    line = `Zero "ah", "um" or "uh" — the sound of hesitation is gone. What's left is ${crutchTotal} crutch word${crutchTotal === 1 ? "" : "s"}${crutches[0] ? `, mostly "${crutches[0][0]}" (×${crutches[0][1]})` : ""} — a much easier habit to break than a real filler sound.`;
+  } else {
+    const worst = sounds[0];
+    if (soundPer < 3) {
+      line = `${soundTotal} "ah"/"um"/"uh" in ${r.wc} words — about ${soundPer.toFixed(1)}%. Below three percent is where a listener stops noticing. You're there.`;
+    } else if (soundPer < 6) {
+      line = `${soundTotal} "ah"/"um"/"uh" in ${r.wc} words, roughly ${soundPer.toFixed(1)}% — mostly "${worst[0]}" (×${worst[1]}). Audible but not distracting. They cluster where you change direction — that's the place to swap in a half-second of silence instead of a sound.`;
+    } else {
+      line = `${soundTotal} "ah"/"um"/"uh" in ${r.wc} words, about ${soundPer.toFixed(1)}%. That's high enough that a panel hears the hesitation instead of the argument. "${worst[0]}" alone is ${worst[1]} of them — hunt just that one sound for a week before touching anything else.`;
+    }
+  }
+  return { rows, sounds, crutches, soundTotal, crutchTotal, total, per, soundPer, line };
 }
 
 /* The Grammarian. Errors, plus whether the Word of the Day was used. */
@@ -1315,6 +1530,13 @@ function gramReport(r, wotd, usedWotd) {
   }
   if (regional.length) {
     parts.push(`${regional.length} usage${regional.length === 1 ? "" : "s"} reads perfectly normal here but lands oddly in a global room.`);
+  }
+  // A construction the speaker themselves abandoned and restarted isn't a
+  // grammar error — it's self-repair, and only the finished version is
+  // judged. Said here so it doesn't quietly show up as an unexplained
+  // "tangled sentence" instead.
+  if (r.abandonedCount > 0) {
+    parts.push(`You caught yourself and restarted ${r.abandonedCount} time${r.abandonedCount === 1 ? "" : "s"} mid-thought. That's self-correction, not an error — only the sentence you actually finished gets judged.`);
   }
   return { errs, regional, junk, junkTotal, line: parts.join(" "), wotd, usedWotd };
 }
@@ -1765,20 +1987,43 @@ const ROMAN_INDIC = new Set(("aap aapka accha acha achha adhik agar ainvayi aise
   + "hu tame shu kem saras nathi che "
   + "main tusi ki kiven changa nahi hai hun").split(/\s+/).filter(Boolean));
 
-/* Crutch words are language-specific. "Matlab" is Hindi's "like". */
+/* Crutch words are language-specific. "Matlab" is Hindi's "like". Every entry
+   here is a word that is *only* a discourse crutch — it carries no ordinary
+   lexical meaning of its own, so flagging it unconditionally never mistakes
+   a real word for a filler. "toh" is the one exception: it also chains an
+   "agar" ("if") clause as a genuine conjunction, so that one case is excluded
+   in findFillers instead of being pulled out of the dictionary. */
 const FILLERS_BY_LANG = {
-  "hi-IN": ["matlab", "yaani", "woh", "wo", "arre", "haan", "toh", "bas", "acha", "achha", "na", "kya bolun", "समझे", "मतलब", "यानी", "अरे", "तो", "बस"],
-  "mr-IN": ["mhanje", "ase", "arre", "ho", "म्हणजे", "असं", "अरे"],
-  "bn-IN": ["mane", "jani", "accha", "মানে", "মানে কি", "আচ্ছা"],
+  "hi-IN": ["matlab", "yaani", "arre", "toh", "bas", "na", "kya bolun", "समझे", "मतलब", "यानी", "अरे", "तो", "बस"],
+  "mr-IN": ["mhanje", "arre", "म्हणजे", "अरे"],
+  "bn-IN": ["mane", "jani", "মানে", "মানে কি"],
   "gu-IN": ["etle", "matlab", "એટલે", "મતલબ"],
-  "ta-IN": ["appuram", "adhu", "seri", "enna", "அப்புறம்", "அது", "சரி"],
-  "te-IN": ["ante", "aa", "sare", "avunu", "అంటే", "సరే"],
-  "kn-IN": ["andre", "adu", "sari", "ಅಂದ್ರೆ", "ಸರಿ"],
-  "ml-IN": ["ennu vachal", "athu", "sheri", "അതായത്", "ശരി"],
-  "pa-IN": ["matlab", "ਮਤਲਬ", "ਹਾਂਜੀ"],
+  "ta-IN": ["appuram", "அப்புறம்"],
+  "te-IN": ["ante", "అంటే"],
+  "kn-IN": ["andre", "ಅಂದ್ರೆ"],
+  "ml-IN": ["ennu vachal", "athayat", "അതായത്"],
+  "pa-IN": ["matlab", "ਮਤਲਬ"],
   "od-IN": ["mane", "ମାନେ"],
 };
 const ALL_INDIC_FILLERS = [...new Set(Object.values(FILLERS_BY_LANG).flat())];
+
+/* Words that are fillers in one breath and ordinary vocabulary in the next:
+   "accha"/"achha" is also the adjective "good", "haan" is also the literal
+   answer "yes", "sari"/"sare"/"seri"/"sheri" ("okay/correct") double as a
+   genuine agreement. None of these carry a fixed meaning on their own the way
+   "matlab" or "arre" do, so counting every occurrence penalised a speaker for
+   using an ordinary word. They only count as a filler when they sit next to
+   another filler-type word — the pattern of an actual hesitation cluster
+   ("accha... matlab... woh kya bolte hain") rather than a sentence that
+   happens to contain "good" or "yes" or "okay". See findFillers. */
+const AMBIGUOUS_FILLERS_BY_LANG = {
+  "hi-IN": ["acha", "achha", "accha", "haan"],
+  "ta-IN": ["seri", "சரி"],
+  "te-IN": ["sare", "avunu", "సరే"],
+  "kn-IN": ["sari", "ಸರಿ"],
+  "ml-IN": ["sheri", "ശരി"],
+};
+const ALL_AMBIGUOUS_INDIC = [...new Set(Object.values(AMBIGUOUS_FILLERS_BY_LANG).flat())];
 
 /* What language is this, really? Reads the text rather than trusting a
    setting, because code-mixing is the normal case, not the exception. */
@@ -1860,14 +2105,7 @@ async function groqChat(system, user, maxTokens = 900) {
 function sarvamBase() { return "/api/sarvam"; }
 const sarvamReady = () => true;   // the key lives on the server; failures are caught per-call
 
-/** Transcribe a recorded clip. Returns the words in the language they were
- *  spoken in — YAP analyses the original, never a translation.
- *
- *  Mode matters more than it looks. Sarvam's default "transcribe" normalises
- *  the audio into tidy prose, which quietly deletes the filler words the
- *  Ah-Counter exists to count. "verbatim" keeps every "um", "matlab" and false
- *  start, so the coaching is about what was actually said. */
-async function sarvamTranscribe(blob, langCode, { translate = false, mode = "verbatim", timestamps = false } = {}) {
+async function sarvamTranscribeOnce(blob, langCode, { translate = false, mode = "verbatim", timestamps = false } = {}) {
   const base = sarvamBase();
   if (!base) throw new Error("no-proxy");
   const fd = new FormData();
@@ -1878,7 +2116,10 @@ async function sarvamTranscribe(blob, langCode, { translate = false, mode = "ver
     if (timestamps) fd.append("with_timestamps", "true");
   }
   const res = await fetch(base + (translate ? "/sttTranslate" : "/stt"), { method: "POST", body: fd });
-  if (!res.ok) throw new Error("sarvam " + res.status);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`sarvam ${res.status}: ${body.slice(0, 300)}`);
+  }
   const j = await res.json();
   return {
     text: String(j.transcript || "").trim(),
@@ -1886,6 +2127,111 @@ async function sarvamTranscribe(blob, langCode, { translate = false, mode = "ver
     confidence: typeof j.language_probability === "number" ? j.language_probability : null,
     timestamps: j.timestamps || null,
     mode: j.mode || mode,
+  };
+}
+
+/* Duration via a plain <audio> element — cheap, no need to decode samples
+   just to find out whether splitting is even necessary. */
+function clipDuration(blob) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio();
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(audio.duration || 0); };
+    audio.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+    audio.src = url;
+  });
+}
+
+function writeAsciiString(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
+/* Mono 16-bit PCM WAV — the simplest format Sarvam accepts, and simple
+   enough to hand-encode without a library. */
+function encodeWav(samples, sampleRate) {
+  const buf = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buf);
+  writeAsciiString(view, 0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeAsciiString(view, 8, "WAVE");
+  writeAsciiString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);          // PCM
+  view.setUint16(22, 1, true);          // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAsciiString(view, 36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  let o = 44;
+  for (let i = 0; i < samples.length; i++, o += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+/* Sarvam's synchronous speech-to-text endpoint hard-caps a request at 30
+   seconds of audio ("use the batch API for longer files") — but Table
+   Topics alone runs up to 5 minutes, so anything past a Table Topic's
+   shortest slot was 400ing outright with no transcript at all. Decode the
+   tape once and cut it into sub-30s pieces so every mode keeps working
+   regardless of length; the cuts land on fixed timestamps rather than
+   silences, so an occasional word is split across a chunk boundary — a much
+   smaller cost than losing the whole take. */
+async function splitIntoChunks(blob, chunkSeconds = 25) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();
+  try {
+    const audioBuffer = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const sr = audioBuffer.sampleRate;
+    const chunkLen = Math.floor(chunkSeconds * sr);
+    const mono = audioBuffer.numberOfChannels === 1
+      ? audioBuffer.getChannelData(0)
+      : (() => {
+          const chans = Array.from({ length: audioBuffer.numberOfChannels }, (_, i) => audioBuffer.getChannelData(i));
+          const out = new Float32Array(audioBuffer.length);
+          for (let i = 0; i < out.length; i++) {
+            let sum = 0; for (const c of chans) sum += c[i];
+            out[i] = sum / chans.length;
+          }
+          return out;
+        })();
+    const parts = [];
+    for (let start = 0; start < mono.length; start += chunkLen) {
+      parts.push(encodeWav(mono.subarray(start, Math.min(start + chunkLen, mono.length)), sr));
+    }
+    return parts;
+  } finally {
+    ctx.close().catch(() => {});
+  }
+}
+
+/** Transcribe a recorded clip. Returns the words in the language they were
+ *  spoken in — YAP analyses the original, never a translation.
+ *
+ *  Mode matters more than it looks. Sarvam's default "transcribe" normalises
+ *  the audio into tidy prose, which quietly deletes the filler words the
+ *  Ah-Counter exists to count. "verbatim" keeps every "um", "matlab" and false
+ *  start, so the coaching is about what was actually said. */
+async function sarvamTranscribe(blob, langCode, opts = {}) {
+  const dur = await clipDuration(blob);
+  if (!dur || dur <= 28) return sarvamTranscribeOnce(blob, langCode, opts);
+
+  const chunks = await splitIntoChunks(blob);
+  const results = await Promise.all(
+    chunks.map((c) => sarvamTranscribeOnce(c, langCode, opts).catch(() => null))
+  );
+  const ok = results.filter(Boolean);
+  if (!ok.length) throw new Error("sarvam: every chunk failed");
+  return {
+    text: ok.map((r) => r.text).filter(Boolean).join(" ").trim(),
+    language: ok.find((r) => r.language)?.language || null,
+    confidence: ok.find((r) => typeof r.confidence === "number")?.confidence ?? null,
+    timestamps: null,
+    mode: ok[0].mode,
   };
 }
 
@@ -2031,24 +2377,6 @@ function preferSarvamWriter() {
   return sarvamReady() && r && r !== "en-IN";
 }
 
-/* Same proxy, same rules — but the user message carries image blocks. Kept
-   separate from askClaude so nothing on the text path changes. */
-async function askClaudeVision(system, content, maxTokens = 700) {
-  const proxy = proxyUrl();
-  if (!proxy) throw new Error("no-proxy");
-  const res = await fetch(proxy, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens,
-      system: system + languageDirective(spokenLangCode()),
-      messages: [{ role: "user", content }] }),
-  });
-  if (!res.ok) throw new Error("vision " + res.status);
-  const data = await res.json();
-  const t = (data.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n")
-    .replace(/```json|```/g, "").trim();
-  return JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1));
-}
-
 async function askClaude(system, user, maxTokens = 900, spoken) {
   if (preferSarvamWriter()) {
     try {
@@ -2087,8 +2415,8 @@ async function askClaude(system, user, maxTokens = 900, spoken) {
 
 const EVAL_SYS = `You are the General Evaluator at a Toastmasters-style meeting, reviewing a student's impromptu answer in India. You are reading a speech-to-text transcript: no punctuation, no capitals — never mention either.
 Return ONLY raw JSON:
-{"commend":"one specific thing that worked, quoting their words, 1-2 sentences","recommend":"the single change that would most improve the next speech, 1-2 sentences, concrete","vocab":[{"weak":"phrase they used","better":"stronger alternative","why":"under 10 words"}]}
-Max 3 vocab items. Warm but not soft — a real evaluator commends first, then gives one recommendation they can act on tomorrow. Address them as "you".`;
+{"structure":"one sentence on how the speech was organised — did it open with a position, build a case, and close, or just wander","flow":"one sentence on how ideas moved from one to the next — smooth transitions, or abrupt jumps a listener has to bridge themselves","content":"one sentence on the substance offered — real reasons and examples, or mostly restating the question","language":"one sentence on how clear and precise the language was — could a listener follow it first-time, or did it need re-reading","coverage":"one sentence on how much of the topic they actually covered — one angle only, or several sides of it","commend":"one specific thing that worked, quoting their words, 1-2 sentences","recommend":"the single change that would most improve the next speech, 1-2 sentences, concrete","vocab":[{"weak":"phrase they used","better":"stronger alternative","why":"under 10 words"}]}
+Max 3 vocab items. Warm but not soft — a real evaluator commends first, then gives one recommendation they can act on tomorrow. Address them as "you". Every field must be grounded in what they actually said — quote or paraphrase specifics, never generic praise or generic criticism.`;
 
 /* ==========================================================================
    MICROPHONE
@@ -2338,7 +2666,12 @@ function useMic() {
           setSarvam({ state: "working" });
           reread
             .then((next) => { sarvamRef.current = next; setSarvam(next); })
-            .catch(() => { sarvamRef.current = { state: "failed" }; setSarvam({ state: "failed" }); })
+            .catch((err) => {
+              // surfaced only in devtools — the UI just says "unavailable",
+              // but this is what actually broke, for whoever's debugging it
+              console.error("[YAP] accuracy pass failed:", err);
+              sarvamRef.current = { state: "failed" }; setSarvam({ state: "failed" });
+            })
             .finally(() => { sarvamPendingRef.current = false; });
         };
         recorder.current.start(1000);
@@ -2853,7 +3186,7 @@ function RomanToggle({ text, from }) {
 
 /* The one place a user sets how they speak and how YAP answers. */
 function LanguageBar({ mic }) {
-  const [reply, setReply] = usePersisted("replyLang", "en-IN");
+  const [reply] = usePersisted("replyLang", "en-IN");
   const [open, setOpen] = useState(false);
   const spoken = mic.lang;
   const spokenLabel = (MIC_LANGS.find((l) => l.id === spoken) || {}).label || spoken;
@@ -2870,13 +3203,6 @@ function LanguageBar({ mic }) {
             {MIC_LANGS.map((l) => (
               <button key={l.id} className="chip" data-on={spoken === l.id ? "1" : "0"}
                 onClick={() => mic.setLang(l.id)}>{l.label}</button>
-            ))}
-          </div>
-          <div className="eye" style={{ marginTop: 16 }}>Coach me in</div>
-          <div className="row" style={{ marginTop: 8 }}>
-            {LANGUAGES.filter((l) => l.code !== "auto").map((l) => (
-              <button key={l.code} className="chip" data-on={reply === l.code ? "1" : "0"}
-                onClick={() => setReply(l.code)}>{l.native}</button>
             ))}
           </div>
           <p className="ex" style={{ marginTop: 12 }}>
@@ -2925,6 +3251,41 @@ function RoleHead({ role }) {
         <div className="rrole">{role.role}</div>
       </div>
     </div>
+  );
+}
+
+/* Shared body for the Ah-Counter's card, everywhere that role shows up
+   (Table Topics, Debate, Group Discussion): a count for "ah"/"um"/"uh" by
+   name first, the coaching line, then the two tallies kept visibly separate
+   so a speaker can tell a hesitation sound from a habitual crutch word. */
+function AhCounterBody({ a, extra }) {
+  return (
+    <>
+      <div className="dials" style={{ margin: "4px 0 12px" }}>
+        <div className="dial">
+          <b className={a.soundPer < 3 ? "ok" : a.soundPer < 6 ? "warn" : "bad"}>{a.soundTotal}</b>
+          <span>Ah · um · uh</span>
+        </div>
+        <div className="dial">
+          <b className={a.crutchTotal <= 2 ? "ok" : "warn"}>{a.crutchTotal}</b>
+          <span>Other crutches</span>
+        </div>
+      </div>
+      <p style={{ fontSize: 15, lineHeight: 1.65 }}>{a.line}</p>
+      {a.sounds.length > 0 && (
+        <>
+          <div className="eye" style={{ marginTop: 12 }}>Ah · um · uh</div>
+          <div className="tally">{a.sounds.map(([w, n]) => <span className="tchip" key={w}>{w} <b>×{n}</b></span>)}</div>
+        </>
+      )}
+      {a.crutches.length > 0 && (
+        <>
+          <div className="eye" style={{ marginTop: 12 }}>Other crutch words</div>
+          <div className="tally">{a.crutches.map(([w, n]) => <span className="tchip" key={w}>{w} <b>×{n}</b></span>)}</div>
+        </>
+      )}
+      {extra}
+    </>
   );
 }
 
@@ -3336,7 +3697,6 @@ function renderClarity(text, r) {
   };
   c.empty.forEach((e) => addPhrase(e.phrase, "hl-empty"));
   c.wordy.forEach((w) => addPhrase(w.was, "hl-wordy"));
-  c.passive.forEach((p) => addPhrase(p.phrase, "hl-passive"));
   c.repeatedIdeas.slice(0, 4).forEach((x) => addPhrase(x.phrase, "hl-repeat"));
   r.fillers.forEach((f) => addPhrase(f.phrase, f.kind === "hedge" ? "hed" : "fil"));
 
@@ -3378,7 +3738,6 @@ function ClarityCard({ r, aiRewrites }) {
         <ScoreDial label="Clarity" value={c.score} />
         <div className="dial"><b>{Math.round(c.wastePct)}%</b><span>Words wasted</span></div>
         <div className="dial"><b className={c.longOnes.length ? "warn" : "ok"}>{c.longOnes.length}</b><span>Long sentences</span></div>
-        <div className="dial"><b className={c.passive.length > 2 ? "warn" : "ok"}>{c.passive.length}</b><span>Passive</span></div>
       </div>
       <p style={{ fontSize: 15, lineHeight: 1.65 }}>{c.line}</p>
 
@@ -3398,20 +3757,6 @@ function ClarityCard({ r, aiRewrites }) {
               <div><span className="was">{w.was}</span> → <span className="now">{w.now || "(cut it)"}</span></div>
             </div>
           ))}
-        </>
-      )}
-
-      {c.passive.length > 0 && (
-        <>
-          <div className="eye" style={{ margin: "16px 0 8px" }}>Passive voice · {c.passive.length}</div>
-          {c.passive.slice(0, 3).map((p, i) => (
-            <div className="fixrow" key={i}>
-              <span className="badge r">Passive</span>
-              <div><span className="now">{p.phrase}</span>{p.hasAgent ? " — the doer is buried at the end" : " — nobody is doing the doing"}</div>
-              <p>“…{p.ctx}…”</p>
-            </div>
-          ))}
-          <p className="ex">Passive isn't always wrong, but in a spoken answer it usually hides who is responsible. Name the actor and the sentence gets shorter by itself.</p>
         </>
       )}
 
@@ -4525,12 +4870,27 @@ const countRe = (t, re) => (t.match(new RegExp(re.source, re.flags)) || []).leng
 
 /* Did they hold the line they picked? Not a style question — a debate is
    scored on whether your case survives your own speech. */
-function stanceConsistency(text, stance) {
+function stanceConsistency(text, stance, base) {
   const t = " " + (text || "").toLowerCase() + " ";
   const f = countRe(t, FOR_MARKERS);
   const a = countRe(t, AGAINST_MARKERS);
   const n = countRe(t, NEUTRAL_MARKERS);
   const total = f + a + n;
+
+  // FOR/AGAINST/NEUTRAL markers are English phrases ("i support", "on
+  // balance"...), so they read as zero on a Hindi or Tamil speech even when
+  // the speaker took a clear side. Falling through to "you never said
+  // plainly" would be a false claim about a language this check can't parse.
+  // base.hasStance already knows, in every supported language, whether a
+  // position was taken at all — that's the honest thing to report instead of
+  // guessing which side from markers that were never going to match.
+  if (base && !base.isEnglish && total === 0) {
+    const score = base.hasStance ? 62 : 30;
+    const note = base.hasStance
+      ? `You did take a position in ${langName(base.lang.primary)}. Automatically checking which side, and whether you held it, only works in English right now, so that part isn't scored — the rest of this report is.`
+      : `I couldn't find a clear position in what you said. State it early, in your own language, before you build the case.`;
+    return { score, forCount: f, againstCount: a, neutralCount: n, drifted: false, note, unscoredDirection: true };
+  }
 
   // A neutral speaker *should* show both sides; that is the position, not drift.
   if (stance === "neutral") {
@@ -4574,18 +4934,27 @@ function analyseDebate(text, seconds, mode, stance, lang) {
   const t = " " + (text || "").toLowerCase() + " ";
   const wc = base.wc;
 
-  const consistency = stanceConsistency(text, stance);
+  const consistency = stanceConsistency(text, stance, base);
   const evidenceHits = countRe(t, DBT_EVIDENCE);
   const counterHits = countRe(t, DBT_COUNTER);
   const rebutHits = countRe(t, DBT_REBUT);
   const claimHits = countRe(t, DBT_CLAIM);
 
+  // DBT_EVIDENCE still catches numbers, percentages and currency regardless
+  // of language, so it stays on either way; its phrase half ("for example",
+  // "research shows"...) just won't fire outside English.
   const evidence = wc < 10 ? 0 : Math.min(100, Math.round(evidenceHits * 26 + Math.min(wc / 12, 20)));
   // raising the other side is worth something; answering it is worth more
   const counter = Math.min(100, counterHits * 30 + rebutHits * 22);
-  const argument = wc < 10 ? 0 : Math.min(100, Math.round(
-    (claimHits > 0 ? 26 : 0) + Math.min(base.connectives * 11, 33) +
-    (DBT_CONCLUDE.test(text || "") ? 21 : 0) + Math.min(evidenceHits * 10, 20)
+  // CLAIM/CONCLUDE are English phrases too ("my case is", "to conclude"), so
+  // outside English this leans on the primitives analyse() already detects
+  // in every supported language — hasStance and hasClose — instead of
+  // silently reading as "no argument" for a language it can't parse.
+  const argument = wc < 10 ? 0 : Math.min(100, Math.round(base.isEnglish
+    ? (claimHits > 0 ? 26 : 0) + Math.min(base.connectives * 11, 33) +
+      (DBT_CONCLUDE.test(text || "") ? 21 : 0) + Math.min(evidenceHits * 10, 20)
+    : (base.hasStance ? 26 : 0) + Math.min(base.connectives * 11, 33) +
+      (base.hasClose ? 21 : 0) + Math.min(evidenceHits * 10, 20)
   ));
 
   /* Delivery counts, but a debate is won on the case. Weights say so. */
@@ -5142,728 +5511,6 @@ function MockInterview({ mic, onFinish, lib }) {
 }
 
 
-/* ==========================================================================
-   CAMERA PRACTICE
-   For people who can already speak, and freeze the moment a lens is pointed
-   at them.
-
-   An honesty note that shapes the whole design: eye contact, facial expression
-   and body language cannot be measured from pixels without a vision model. So
-   this module does two separate things and never blurs them —
-
-     measured locally, always:  framing, lighting, stillness, how much of the
-                                take you spent actually in shot, plus every
-                                existing speech metric
-     seen by a vision model:    eye contact, expression, posture, gestures —
-                                opt-in, three frames, clearly labelled
-
-   Nothing here claims to see what it cannot see.
-   ========================================================================== */
-
-const CAM_TOPICS = {
-  "Talking to camera": [
-    "Introduce yourself in thirty seconds, like a first video.",
-    "Explain something you know well to someone who's never heard of it.",
-    "Tell the story of a mistake you made and what you'd do differently.",
-    "Give three honest opinions about your field.",
-    "Answer: what does your day actually look like?",
-    "Recommend something you love and say why, without saying 'amazing'.",
-  ],
-  "Reels & shorts": [
-    "One tip that took you a year to learn.",
-    "Something everyone in your field gets wrong.",
-    "A myth about your subject, and the truth.",
-    "The one thing you'd tell your first-year self.",
-    "React to a strong opinion in your field and take a side.",
-  ],
-  "Professional": [
-    "Record a 60-second update for your team on a project.",
-    "Introduce your work for a company page.",
-    "Explain your final-year project to a recruiter.",
-    "Pitch an idea to someone who has ninety seconds.",
-    "Say thank you to someone publicly without sounding stiff.",
-  ],
-};
-
-/* The prep is deliberately three boxes, not a script. Reading a script to
-   camera is the exact thing that makes people look unnatural. */
-const CAM_FRAME = [
-  { k: "hook", label: "Opening line", ask: "First five seconds. No 'hi guys, so today'." },
-  { k: "points", label: "Two or three points", ask: "Bullets, not sentences. You'll say them your own way." },
-  { k: "close", label: "Closing (optional)", ask: "How you land it, or how you hand off." },
-];
-
-/* ---------------- what a camera can honestly be told ---------------- */
-
-/* Reads a canvas sample of one frame: how bright, how centred the subject is,
-   and how much of the frame they occupy. */
-function frameStats(ctx, w, h) {
-  const d = ctx.getImageData(0, 0, w, h).data;
-  let sum = 0, cx = 0, cy = 0, weight = 0, dark = 0, blown = 0;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-      sum += lum;
-      if (lum < 26) dark++;
-      if (lum > 246) blown++;
-      // brighter pixels are usually the lit subject rather than the room
-      const wgt = Math.max(0, lum - 40);
-      cx += x * wgt; cy += y * wgt; weight += wgt;
-    }
-  }
-  const n = w * h;
-  return {
-    lum: sum / n,
-    cx: weight ? cx / weight / w : 0.5,
-    cy: weight ? cy / weight / h : 0.5,
-    darkShare: dark / n,
-    blownShare: blown / n,
-  };
-}
-
-function diffFrames(a, b) {
-  let d = 0;
-  for (let i = 0; i < a.length; i += 16) d += Math.abs(a[i] - b[i]);
-  return d / (a.length / 16) / 255;
-}
-
-/* Turn a run of samples into things worth saying out loud. */
-function cameraReadout(samples) {
-  if (!samples || samples.length < 3) {
-    return { ok: false, note: "Not enough of the take was captured to read the picture." };
-  }
-  const avg = (k) => samples.reduce((s, x) => s + x[k], 0) / samples.length;
-  const lum = avg("lum");
-  const cx = avg("cx"), cy = avg("cy");
-  const dark = avg("darkShare"), blown = avg("blownShare");
-  const mostlyDark = dark > 0.55;
-  const motion = samples.map((s) => s.motion).filter((m) => typeof m === "number");
-  const move = motion.length ? motion.reduce((a, b) => a + b, 0) / motion.length : 0;
-  const drift = Math.hypot(
-    Math.max(...samples.map((s) => s.cx)) - Math.min(...samples.map((s) => s.cx)),
-    Math.max(...samples.map((s) => s.cy)) - Math.min(...samples.map((s) => s.cy))
-  );
-
-  const lighting = (lum < 45 || mostlyDark) ? "dark" : lum > 190 ? "bright" : blown > 0.12 ? "blown" : "good";
-  const centred = Math.abs(cx - 0.5) < 0.16;
-  const height = cy < 0.3 ? "high" : cy > 0.62 ? "low" : "good";
-  const stillness = move < 0.008 ? "frozen" : move > 0.075 ? "restless" : "good";
-
-  const notes = [];
-  if (lighting === "dark") notes.push({ k: "Lighting", bad: true,
-    v: "The picture is underlit. A window in front of you, or any lamp behind the camera, is the single cheapest upgrade to how you look on video." });
-  if (lighting === "blown") notes.push({ k: "Lighting", bad: true,
-    v: "Parts of the frame are blowing out to white — usually a window behind you. Turn around so the light is on your face instead." });
-  if (lighting === "bright") notes.push({ k: "Lighting", bad: true,
-    v: "Very hot overall. Move away from the light source or diffuse it." });
-  if (lighting === "good") notes.push({ k: "Lighting", bad: false, v: "Well lit. Nothing to fix." });
-
-  if (!centred) notes.push({ k: "Framing", bad: true,
-    v: `You're sitting ${cx < 0.5 ? "left" : "right"} of centre. Recentre — off-centre framing reads as accidental unless the rest of the shot is deliberate.` });
-  else if (height === "high") notes.push({ k: "Framing", bad: true,
-    v: "You're high in the frame with space under your chin. Tilt the camera up or sit lower so your eyes sit around the top third." });
-  else if (height === "low") notes.push({ k: "Framing", bad: true,
-    v: "You're low in the frame. Raise the camera to eye level — shooting up at someone is unflattering and reads as unprepared." });
-  else notes.push({ k: "Framing", bad: false, v: "Well framed and steady." });
-
-  if (stillness === "frozen") notes.push({ k: "Presence", bad: true,
-    v: "Almost no movement for the whole take. Stillness reads as tension on camera, not calm — let your hands into the frame." });
-  if (stillness === "restless") notes.push({ k: "Presence", bad: true,
-    v: "A lot of constant motion. Some is energy; this much reads as nerves. Plant your feet and let the movement come from gestures instead." });
-  if (stillness === "good") notes.push({ k: "Presence", bad: false, v: "Natural amount of movement." });
-
-  if (drift > 0.22) notes.push({ k: "Steadiness", bad: true,
-    v: "You drifted a long way across the frame during the take. If you're holding the phone, prop it against something." });
-
-  /* Framing and stillness barely matter if nobody can see you, so lighting
-     scales the rest rather than just adding to it. */
-  const litFactor = lighting === "good" ? 1 : lighting === "bright" ? 0.72 : mostlyDark ? 0.4 : 0.55;
-  const score = Math.max(0, Math.min(100, Math.round(
-    ((lighting === "good" ? 34 : lighting === "bright" ? 22 : 10) +
-     (centred ? 22 : 8) + (height === "good" ? 22 : 10) +
-     (stillness === "good" ? 22 : stillness === "frozen" ? 10 : 8)) * litFactor
-  )));
-
-  return { ok: true, score, lighting, centred, height, stillness, lum: Math.round(lum),
-    move: Number(move.toFixed(3)), drift: Number(drift.toFixed(2)), notes };
-}
-
-/* One take: the picture, the speech, and a single thing to fix. */
-function analyseTake(text, seconds, camera, lang) {
-  const speech = analyse(text, Math.max(1, seconds), "mic", lang);
-
-  // On camera, energy is mostly variation. A monotone read is the commonest
-  // complaint and it shows up as uniform sentence length and flat vocabulary.
-  const lens = speech.units.map((u) => (u.match(/\S+/g) || []).length);
-  const mean = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
-  const spread = lens.length > 1
-    ? Math.sqrt(lens.reduce((a, b) => a + (b - mean) ** 2, 0) / lens.length) : 0;
-  const energy = speech.wc < 10 ? 0 : Math.min(100, Math.round(Math.min(spread / 8, 1) * 55 + Math.min(speech.range * 0.45, 45)));
-
-  // A strong opening is measurable: did the first sentence say something, or
-  // was it throat-clearing?
-  const first = (speech.units[0] || "").toLowerCase();
-  const weakOpen = /^(so|um|uh|hi guys|hey guys|hello everyone|okay so|yeah so|right so|today i)/.test(first.trim());
-  const hook = speech.wc < 8 ? 0 : Math.max(0, Math.min(100,
-    (weakOpen ? 25 : 70) + (first.split(/\s+/).length <= 16 ? 18 : 0) + (/\?|\bimagine\b|\bhere's\b|\bmost people\b/.test(first) ? 12 : 0)));
-
-  const natural = Math.max(0, Math.min(100, Math.round(
-    100 - (speech.fillerCount / Math.max(speech.wc, 1)) * 380 - speech.hedgeCount * 3
-    - (speech.wpm > 185 ? 14 : 0) - (speech.wpm < 95 && speech.wc > 20 ? 12 : 0)
-  )));
-
-  const cam = camera && camera.ok ? camera.score : null;
-  const overall = speech.wc < 8 ? 0 : Math.round(
-    (cam !== null ? cam * 0.22 : 0) + energy * 0.18 + natural * 0.2 + hook * 0.14 +
-    speech.clarity100 * 0.13 + speech.fluency * 0.13 + (cam !== null ? 0 : 22)
-  );
-
-  return { ...speech, camera, energy, hook, weakOpen, natural, takeScore: Math.min(100, overall) };
-}
-
-/* The one thing to fix. Not a list — a list is how people quit. */
-function oneThing(take) {
-  const c = take.camera;
-  const cands = [];
-  if (c && c.ok) {
-    // an unseeable picture is the most urgent thing there is; a slightly
-    // off-centre one is not, so weight per problem rather than per score
-    const urgency = { Lighting: c.lighting === "dark" ? 96 : 74, Framing: 64,
-      Presence: 58, Steadiness: 50 };
-    c.notes.filter((n) => n.bad).forEach((n) => cands.push({ w: urgency[n.k] || 55, k: n.k, v: n.v }));
-  }
-  if (take.fillerCount / Math.max(take.wc, 1) > 0.045) cands.push({ w: 62,
-    k: "Filler words", v: `${take.fillerCount} crutch words in ${take.wc}. On camera they're louder than in person because there's nothing else to look at. Next take: when you feel one coming, just stop for half a second.` });
-  if (take.weakOpen) cands.push({ w: 70,
-    k: "Your opening", v: "You warmed up into it — the first line was throat-clearing. Cut it. Start on the sentence you'd have got to five seconds in; people decide in three." });
-  if (take.wpm > 185) cands.push({ w: 58,
-    k: "Pace", v: `${take.wpm} words a minute. Nerves speed people up on camera and it reads as rushing. Say the next one slower than feels right — it'll sound normal on playback.` });
-  if (take.energy < 40) cands.push({ w: 55,
-    k: "Energy", v: "Flat delivery — same length sentences, same pitch. Camera flattens you by about 20%, so the level that feels slightly too much in the room is the level that reads as normal on video." });
-  if (take.natural < 50) cands.push({ w: 52,
-    k: "Sounding natural", v: "It came out stiffer than you'd talk to a friend. Try the next take as if you're explaining it to one person you like, not to an audience." });
-  if (!cands.length) cands.push({ w: 10,
-    k: "Nothing obvious", v: "Nothing is badly wrong. The next gain is smaller: pick one sentence you'd cut and do it again without it." });
-  cands.sort((a, b) => b.w - a.w);
-  return cands.slice(0, 2);
-}
-
-const CAM_PREP_SYS = `You help someone plan a short piece to camera. They will speak it out loud, unscripted, so give them bones to hang it on — never a script to read.
-Return ONLY raw JSON:
-{"hook":"an opening line they could actually say in five seconds, in their voice, no 'hi guys'",
-"points":["2-3 bullet points, each a few words, not sentences"],
-"close":"one closing line, or an empty string if it doesn't need one",
-"tip":"one specific delivery note for this particular topic, 1 sentence"}
-Sayable and plain. Short words. Nothing that sounds like it was written down.`;
-
-const CAM_VISION_SYS = `You are looking at three still frames from someone practising speaking to camera. They are nervous about being on video and want practical, kind, specific feedback.
-Return ONLY raw JSON:
-{"eyes":"where they are looking relative to the lens, 1 sentence",
-"expression":"what their face is doing, 1 sentence, kind but honest",
-"posture":"shoulders, distance, angle, 1 sentence",
-"one":"the single most useful physical change for their next take, 1-2 sentences, specific and doable right now"}
-Never comment on how they look — only on what they are doing. Nothing about appearance, attractiveness, clothing, weight, skin or age. If a frame is too dark or blurry to judge, say so plainly instead of guessing.`;
-
-/* ----------------------------- CAMERA UI ---------------------------------- */
-
-const CAM_CSS = `
-.camstage{position:relative;border:2.5px solid var(--line);border-radius:20px;overflow:hidden;
-  background:#000;aspect-ratio:9/16;max-height:56vh;margin:0 auto;display:grid;place-items:center}
-.camstage video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
-.camstage video[data-mirror="0"]{transform:none}
-.camoff{color:var(--ink60);font-family:var(--mon);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
-.camdot{position:absolute;top:12px;left:12px;display:flex;align-items:center;gap:7px;
-  background:rgba(0,0,0,.55);border-radius:999px;padding:5px 11px;font-family:var(--mon);font-size:11px;color:#fff}
-.camdot i{width:9px;height:9px;border-radius:50%;background:var(--coral);animation:pulse 1.1s infinite;font-style:normal}
-.camtime{position:absolute;top:12px;right:12px;background:rgba(0,0,0,.55);border-radius:999px;
-  padding:5px 11px;font-family:var(--mon);font-size:12px;color:#fff;font-variant-numeric:tabular-nums}
-.camguide{position:absolute;inset:0;pointer-events:none}
-.camguide span{position:absolute;border:1px dashed rgba(255,255,255,.22)}
-.camguide .h{left:0;right:0;height:0} .camguide .v{top:0;bottom:0;width:0}
-.camguide .eye{left:8%;right:8%;top:33%;height:0;border-color:rgba(157,128,255,.5)}
-.camtip{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(0,0,0,.75));
-  color:#fff;font-size:13px;line-height:1.5;padding:26px 14px 12px}
-.takes{display:flex;gap:10px;flex-wrap:wrap}
-.take{flex:1 1 150px;border:2.5px solid var(--line);border-radius:16px;padding:13px;background:var(--paper)}
-.take[data-best="1"]{border-color:var(--moss)}
-.take b{font-family:var(--dis);font-weight:700;font-size:26px;display:block;line-height:1}
-.take small{font-family:var(--mon);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink60)}
-.take video{width:100%;border-radius:10px;margin-top:9px;background:#000;transform:scaleX(-1)}
-.delta{font-family:var(--mon);font-size:12px;margin-left:6px}
-.delta.up{color:var(--moss)} .delta.down{color:var(--coral)} .delta.same{color:var(--ink60)}
-.onething{border:2.5px solid var(--moss);border-radius:18px;padding:16px;background:rgba(157,128,255,.08)}
-.onething .eye{color:var(--moss)}
-.onething p{font-size:16px;line-height:1.6;margin:6px 0 0}
-.camrow{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-top:14px}
-`;
-
-/* Camera capture. Deliberately separate from useMic so nothing in the existing
-   audio path changes; the two run side by side. */
-function useCamera() {
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState(null);
-  const [recording, setRecording] = useState(false);
-  const [clip, setClip] = useState(null);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const recRef = useRef(null);
-  const chunks = useRef([]);
-  const samples = useRef([]);
-  const sampler = useRef(null);
-  const prevPix = useRef(null);
-  const frames = useRef([]);
-  const startedAt = useRef(0);
-
-  const stop = useCallback(() => {
-    clearInterval(sampler.current);
-    try { if (recRef.current && recRef.current.state !== "inactive") recRef.current.stop(); } catch (e) { /* already stopped */ }
-    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setRecording(false); setReady(false);
-  }, []);
-
-  const open = useCallback(async () => {
-    setError(null);
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError("This browser can't reach a camera."); return false;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 720 }, height: { ideal: 1280 }, facingMode: "user" },
-        audio: true,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play().catch(() => {}); }
-      setReady(true);
-      return true;
-    } catch (e) {
-      setError(window.self !== window.top
-        ? "Preview frames block the camera. Run YAP on localhost to record video — everything else here works."
-        : "Couldn't open the camera. Allow camera and microphone access, then try again.");
-      return false;
-    }
-  }, []);
-
-  /* Samples the picture four times a second while recording, and keeps three
-     stills in case the user asks for vision feedback. */
-  const startSampling = useCallback(() => {
-    samples.current = []; frames.current = []; prevPix.current = null;
-    const cv = document.createElement("canvas");
-    cv.width = 64; cv.height = 114;
-    const ctx = cv.getContext("2d", { willReadFrequently: true });
-    const big = document.createElement("canvas");
-    big.width = 360; big.height = 640;
-    const bctx = big.getContext("2d");
-
-    sampler.current = setInterval(() => {
-      const v = videoRef.current;
-      if (!v || v.readyState < 2) return;
-      ctx.drawImage(v, 0, 0, cv.width, cv.height);
-      const st = frameStats(ctx, cv.width, cv.height);
-      const pix = ctx.getImageData(0, 0, cv.width, cv.height).data;
-      st.motion = prevPix.current ? diffFrames(prevPix.current, pix) : 0;
-      prevPix.current = pix;
-      samples.current.push(st);
-      // keep a still roughly every 4 seconds, capped
-      if (samples.current.length % 16 === 1 && frames.current.length < 3) {
-        bctx.drawImage(v, 0, 0, big.width, big.height);
-        frames.current.push(big.toDataURL("image/jpeg", 0.55).split(",")[1]);
-      }
-    }, 250);
-  }, []);
-
-  const start = useCallback(() => {
-    if (!streamRef.current) return false;
-    chunks.current = [];
-    setClip(null);
-    try {
-      const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
-        .find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
-      const rec = new MediaRecorder(streamRef.current, mime ? { mimeType: mime, videoBitsPerSecond: 1_200_000 } : undefined);
-      recRef.current = rec;
-      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.current.push(e.data); };
-      rec.onstop = () => {
-        clearInterval(sampler.current);
-        if (!chunks.current.length) return;
-        const blob = new Blob(chunks.current, { type: chunks.current[0].type || "video/webm" });
-        setClip({
-          url: URL.createObjectURL(blob), blob,
-          seconds: Math.round((Date.now() - startedAt.current) / 1000),
-          readout: cameraReadout(samples.current),
-          frames: frames.current.slice(),
-        });
-      };
-      startedAt.current = Date.now();
-      rec.start(1000);
-      startSampling();
-      setRecording(true);
-      return true;
-    } catch (e) { setError("Recording failed to start on this browser."); return false; }
-  }, [startSampling]);
-
-  const finish = useCallback(() => {
-    try { if (recRef.current && recRef.current.state !== "inactive") recRef.current.stop(); } catch (e) { /* already stopped */ }
-    setRecording(false);
-  }, []);
-
-  useEffect(() => () => stop(), [stop]);
-  return { videoRef, ready, error, recording, clip, open, start, finish, stop, setClip };
-}
-
-function Delta({ now, before, unit = "" }) {
-  if (before === undefined || before === null) return null;
-  const d = Math.round(now - before);
-  const cls = d > 1 ? "up" : d < -1 ? "down" : "same";
-  return <span className={"delta " + cls}>{d > 0 ? "+" : ""}{d}{unit}</span>;
-}
-
-function CameraPractice({ mic, onFinish, lib }) {
-  const cam = useCamera();
-  const [stage, setStage] = useState("pick");
-  const [topic, setTopic] = useState(() => pick(CAM_TOPICS["Talking to camera"]));
-  const [own, setOwn] = useState("");
-  const [plan, setPlan] = useState({ hook: "", points: "", close: "" });
-  const [planState, setPlanState] = useState("idle");
-  const [tip, setTip] = useState("");
-  const [takes, setTakes] = usePersisted("camTakes", []);   // scores only; video stays in memory
-  const [sessionTakes, setSessionTakes] = useState([]);      // with video, this session
-  const [vision, setVision] = useState(null);
-  const [visionState, setVisionState] = useState("idle");
-  const [petals, setPetals] = useState(false);
-
-  const watch = useStopwatch(180, () => cam.finish());
-  const subject = (own.trim() || topic);
-
-  const getPlan = () => {
-    setPlanState("loading");
-    askClaude(CAM_PREP_SYS, `They are recording a short video about: "${subject}"`, 700)
-      .then((j) => {
-        setPlan({ hook: j.hook || "", points: (j.points || []).join("\n"), close: j.close || "" });
-        setTip(j.tip || ""); setPlanState("done");
-      })
-      .catch(() => setPlanState("offline"));
-  };
-
-  const goLive = async () => {
-    const ok = await cam.open();
-    if (ok) setStage("record");
-  };
-
-  const beginTake = async () => {
-    setVision(null); setVisionState("idle");
-    await mic.start({ record: false });     // transcript only; the camera records the media
-    cam.start(); watch.start();
-  };
-
-  const endTake = useCallback(async () => {
-    cam.finish(); watch.stop(); mic.stop();
-    await mic.settled();
-    const text = mic.bestText().text.trim();
-    const secs = Math.max(1, watch.value());
-    // the clip arrives a tick later from MediaRecorder.onstop
-    setTimeout(() => {
-      const c = cam.clip;
-      const take = analyseTake(text, secs, c && c.readout);
-      const entry = { n: sessionTakes.length + 1, take, url: c && c.url,
-        frames: (c && c.frames) || [], at: Date.now() };
-      setSessionTakes((v) => [...v, entry]);
-      setTakes((v) => [...v.slice(-19), { score: take.takeScore, camera: take.camera && take.camera.score,
-        fillers: take.fillerCount, wpm: take.wpm, at: Date.now() }]);
-      onFinish({ xp: 35 + Math.round(take.takeScore / 3), seconds: secs, kind: "topic" });
-      setPetals(true); setTimeout(() => setPetals(false), 2600);
-      setStage("feedback");
-    }, 350);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cam, mic, sessionTakes.length, onFinish, setTakes]);
-
-  const askVision = () => {
-    const latest = sessionTakes[sessionTakes.length - 1];
-    if (!latest || !latest.frames.length) { setVisionState("noframes"); return; }
-    setVisionState("loading");
-    const content = [
-      ...latest.frames.map((b64) => ({ type: "image",
-        source: { type: "base64", media_type: "image/jpeg", data: b64 } })),
-      { type: "text", text: `Three frames from a ${latest.take.seconds}-second practice video about "${subject}".` },
-    ];
-    askClaudeVision(CAM_VISION_SYS, content, 600)
-      .then((j) => { setVision(j); setVisionState("done"); })
-      .catch(() => setVisionState("offline"));
-  };
-
-  const latest = sessionTakes[sessionTakes.length - 1];
-  const prev = sessionTakes.length > 1 ? sessionTakes[sessionTakes.length - 2] : null;
-
-  /* ---------------------------- 1 · PICK ---------------------------- */
-  if (stage === "pick") {
-    return (
-      <div>
-        <h1 className="h1">Get comfortable<br /><em>on camera.</em></h1>
-        <p className="sub">
-          Nobody's watching but you. Record, get one thing to fix, record again — the second take is
-          almost always better, and that's the whole exercise.
-        </p>
-        {cam.error && <div className="warnbox">{cam.error}</div>}
-
-        <div className="card sky">
-          <div className="eye">Talk about</div>
-          <div className="topic" style={{ minHeight: "auto", marginTop: 6 }}>{subject}</div>
-          <div className="row" style={{ marginTop: 12 }}>
-            {Object.keys(CAM_TOPICS).map((k) => (
-              <button key={k} className="chip" onClick={() => { setOwn(""); setTopic(pick(CAM_TOPICS[k])); }}>{k}</button>
-            ))}
-            {(lib.topics || []).length > 0 && (
-              <button className="chip" onClick={() => { setOwn(""); setTopic(pick(lib.topics.map((t) => t.text))); }}>My library</button>
-            )}
-          </div>
-          <div className="eye" style={{ marginTop: 16 }}>Or your own idea</div>
-          <Writer value={own} onChange={setOwn} rows={2}
-            placeholder="Whatever you actually want to post about." />
-        </div>
-
-        <div className="card">
-          <div className="eye">Rough it out — optional</div>
-          <p className="ex" style={{ margin: "6px 0 0" }}>
-            Bullets, never a script. Reading to camera is the thing that makes people look unnatural,
-            and it's obvious from the first second.
-          </p>
-          {planState !== "done" && (
-            <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn sm" onClick={getPlan} disabled={planState === "loading"}>
-                {planState === "loading" ? <><span className="spin" />Thinking…</> : "Help me plan it"}
-              </button>
-            </div>
-          )}
-          {planState === "offline" && <div className="tip" style={{ marginTop: 10 }}>
-            Planning help needs an API key. Write your own three lines below — it works the same.
-          </div>}
-          <div className="frame" style={{ marginTop: 12 }}>
-            {CAM_FRAME.map((row) => (
-              <div className="framerow" key={row.k} data-filled={plan[row.k].trim() ? "1" : "0"}>
-                <div className="framekey">{row.k === "hook" ? "1" : row.k === "points" ? "2" : "3"}</div>
-                <div className="framebody">
-                  <b>{row.label}</b><small>{row.ask}</small>
-                  <textarea rows={row.k === "points" ? 3 : 1} value={plan[row.k]}
-                    onChange={(e) => setPlan((p) => ({ ...p, [row.k]: e.target.value }))} />
-                </div>
-              </div>
-            ))}
-          </div>
-          {tip && <div className="note" style={{ marginTop: 12 }}>{tip}</div>}
-        </div>
-
-        <button className="btn go" style={{ width: "100%" }} onClick={goLive}>
-          <span><Icon name="mic" size={18} /> Turn the camera on</span>
-        </button>
-        {takes.length > 0 && (
-          <p className="ex" style={{ textAlign: "center", marginTop: 12 }}>
-            {takes.length} take{takes.length === 1 ? "" : "s"} so far · best {Math.max(...takes.map((x) => x.score))}/100
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  /* --------------------------- 2 · RECORD --------------------------- */
-  if (stage === "record") {
-    const notes = [plan.hook, plan.points, plan.close].filter((x) => x && x.trim());
-    return (
-      <div>
-        <div className="card">
-          <div className="eye" style={{ marginBottom: 10 }}>{subject}</div>
-          <div className="camstage">
-            <video ref={cam.videoRef} muted playsInline />
-            <div className="camguide">
-              <span className="h eye" />
-              <span className="v" style={{ left: "50%" }} />
-            </div>
-            {cam.recording && <>
-              <div className="camdot"><i />REC</div>
-              <div className="camtime">{fmt(watch.t)}</div>
-            </>}
-            {!cam.recording && notes.length > 0 && (
-              <div className="camtip">{notes.join(" · ")}</div>
-            )}
-          </div>
-          <p className="ex" style={{ textAlign: "center", marginTop: 10 }}>
-            {cam.recording
-              ? "Look at the lens, not at yourself. That's the whole trick."
-              : "The dashed line is roughly where your eyes should sit. Nothing is uploaded."}
-          </p>
-          <div className="camrow">
-            {!cam.recording
-              ? <button className="btn go" onClick={beginTake}>Start recording</button>
-              : <button className="btn leaf" onClick={endTake}>Done</button>}
-            {!cam.recording && <button className="btn" onClick={() => { cam.stop(); setStage("pick"); }}>Back</button>}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* -------------------------- 3 · FEEDBACK -------------------------- */
-  const take = latest ? latest.take : null;
-  if (!take) {
-    return <div className="card"><p className="ex">That take didn't record. Try again.</p>
-      <button className="btn go" onClick={() => setStage("record")}>Back to camera</button></div>;
-  }
-  const fixes = oneThing(take);
-  return (
-    <div>
-      <Petals go={petals} />
-      <h1 className="h1">Take {latest.n}.<br /><em>One thing to fix.</em></h1>
-
-      <div className="card onething">
-        <div className="eye">{fixes[0].k}</div>
-        <p>{fixes[0].v}</p>
-        {fixes[1] && (<>
-          <div className="eye" style={{ marginTop: 14 }}>{fixes[1].k}</div>
-          <p>{fixes[1].v}</p>
-        </>)}
-        <button className="btn go" style={{ width: "100%", marginTop: 16 }}
-          onClick={() => { setStage("record"); if (!cam.ready) cam.open(); }}>
-          <span><Icon name="mic" size={18} /> Try it again now</span>
-        </button>
-        <p className="ex" style={{ textAlign: "center", marginTop: 8 }}>
-          Don't read the rest first. Fix that one thing while it's fresh.
-        </p>
-      </div>
-
-      {latest.url && (
-        <div className="card">
-          <div className="eye" style={{ marginBottom: 8 }}>Watch it back</div>
-          <video src={latest.url} controls playsInline style={{ width: "100%", borderRadius: 12, background: "#000", transform: "scaleX(-1)" }} />
-        </div>
-      )}
-
-      {sessionTakes.length > 1 && (
-        <div className="card moss">
-          <div className="eye" style={{ marginBottom: 10 }}>Take {prev.n} → take {latest.n}</div>
-          <div className="takes">
-            {[prev, latest].map((tk, i) => (
-              <div className="take" key={tk.n} data-best={tk.take.takeScore >= Math.max(prev.take.takeScore, latest.take.takeScore) ? "1" : "0"}>
-                <small>take {tk.n}</small>
-                <b>{tk.take.takeScore}{i === 1 && <Delta now={latest.take.takeScore} before={prev.take.takeScore} />}</b>
-              </div>
-            ))}
-          </div>
-          <div className="stat" style={{ marginTop: 12 }}><span>Filler words</span>
-            <b>{latest.take.fillerCount}<Delta now={latest.take.fillerCount} before={prev.take.fillerCount} /></b></div>
-          <div className="stat"><span>Pace</span>
-            <b>{latest.take.wpm} wpm<Delta now={latest.take.wpm} before={prev.take.wpm} /></b></div>
-          <div className="stat"><span>Energy</span>
-            <b>{latest.take.energy}<Delta now={latest.take.energy} before={prev.take.energy} /></b></div>
-          {latest.take.camera && latest.take.camera.ok && prev.take.camera && prev.take.camera.ok && (
-            <div className="stat"><span>On-camera picture</span>
-              <b>{latest.take.camera.score}<Delta now={latest.take.camera.score} before={prev.take.camera.score} /></b></div>
-          )}
-          <p className="ex" style={{ marginTop: 10 }}>
-            {latest.take.takeScore > prev.take.takeScore
-              ? "Better. That's what a second take is for — nothing about you changed, only the reps."
-              : latest.take.takeScore === prev.take.takeScore
-                ? "Level. Pick the one thing above and go again — the gain usually shows on the third."
-                : "Slightly down, which happens when you concentrate on a fix and let something else slip. Normal. Go again."}
-          </p>
-        </div>
-      )}
-
-      <div className="card">
-        <div className="eye" style={{ marginBottom: 10 }}>This take</div>
-        <div className="dials">
-          <ScoreDial label="On camera" value={take.camera && take.camera.ok ? take.camera.score : 0} />
-          <ScoreDial label="Energy" value={take.energy} delay={0.08} />
-          <ScoreDial label="Natural" value={take.natural} delay={0.16} />
-          <ScoreDial label="Opening" value={take.hook} delay={0.24} />
-        </div>
-      </div>
-
-      {take.camera && take.camera.ok && (
-        <div className="card">
-          <div className="eye" style={{ marginBottom: 10 }}>What the picture showed</div>
-          {take.camera.notes.map((n, i) => (
-            <div className="stat" key={i}>
-              <span>{n.k}</span><b className={n.bad ? "warn" : "ok"}>{n.bad ? "fix" : "good"}</b>
-            </div>
-          ))}
-          {take.camera.notes.filter((n) => n.bad).map((n, i) => (
-            <p key={i} className="ex" style={{ marginTop: 8 }}>{n.v}</p>
-          ))}
-          <p className="ex" style={{ marginTop: 10, opacity: .75 }}>
-            Measured from the video on your device — lighting, framing and movement only. Nothing was
-            uploaded to work this out.
-          </p>
-        </div>
-      )}
-
-      <div className="card sky">
-        <div className="eye" style={{ marginBottom: 8 }}>Eye contact, expression and posture</div>
-        {visionState === "idle" && (<>
-          <p style={{ fontSize: 15, lineHeight: 1.6, margin: "0 0 12px" }}>
-            YAP can't judge these from the numbers — they need something to actually look at. If you
-            want that feedback, three still frames from this take get sent for review.
-          </p>
-          <button className="btn sm" onClick={askVision}>Look at my three frames</button>
-          <p className="ex" style={{ marginTop: 8 }}>
-            Your choice, every time. Nothing is sent unless you tap this, the video itself never
-            leaves your device, and the review is told to comment only on what you're doing — never
-            on how you look.
-          </p>
-        </>)}
-        {visionState === "loading" && <p className="ex"><span className="spin" />Looking…</p>}
-        {visionState === "noframes" && <p className="ex">No frames were captured from that take.</p>}
-        {visionState === "offline" && <div className="tip">
-          This needs an API key. Everything above is measured on your device and stands without it.
-        </div>}
-        {visionState === "done" && vision && (
-          <>
-            {[["Eyes", vision.eyes], ["Expression", vision.expression], ["Posture", vision.posture]].map(([k, v]) => v ? (
-              <div key={k} style={{ marginTop: 10 }}>
-                <div className="eye">{k}</div>
-                <p style={{ fontSize: 15, lineHeight: 1.6, margin: "3px 0 0" }}>{v}</p>
-              </div>
-            ) : null)}
-            {vision.one && (<>
-              <div className="eye" style={{ marginTop: 14 }}>Change this next take</div>
-              <div className="note">{vision.one}</div>
-            </>)}
-          </>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="eye">What you said</div>
-        <div className="script" style={{ marginTop: 8, fontSize: 16 }}>
-          {take.text ? renderClarity(take.text, take) : <span className="ex">Nothing was transcribed.</span>}
-        </div>
-      </div>
-
-      {takes.length > 2 && (
-        <div className="card sun">
-          <div className="eye" style={{ marginBottom: 8 }}>Every take you've done</div>
-          <div className="row" style={{ gap: 4, alignItems: "flex-end", height: 60 }}>
-            {takes.slice(-20).map((x, i) => (
-              <div key={i} title={`${x.score}/100`} style={{
-                flex: 1, minWidth: 5, height: `${Math.max(6, x.score)}%`, borderRadius: "4px 4px 0 0",
-                background: x.score >= 70 ? "var(--moss)" : x.score >= 45 ? "var(--sun)" : "var(--coral)",
-              }} />
-            ))}
-          </div>
-          <p className="ex" style={{ marginTop: 8 }}>
-            Best {Math.max(...takes.map((x) => x.score))} · latest {takes[takes.length - 1].score} ·
-            {" "}{takes.length} takes. Scores survive a reload; the videos don't leave this session.
-          </p>
-        </div>
-      )}
-
-      <div className="row">
-        <button className="btn go" onClick={() => { setStage("record"); if (!cam.ready) cam.open(); }}>Another take</button>
-        <button className="btn" onClick={() => { cam.stop(); setStage("pick"); }}>New topic</button>
-      </div>
-    </div>
-  );
-}
-
-
 /* ------------------------------ DEBATE UI --------------------------------- */
 
 const DEBATE_CSS = `
@@ -6372,10 +6019,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
 
       <div className="card coral">
         <RoleHead role={ROLES[1]} />
-        <p style={{ fontSize: 15, lineHeight: 1.65 }}>{aRep.line}</p>
-        {aRep.rows.length > 0 && (
-          <div className="tally">{aRep.rows.map(([w, n]) => <span className="tchip" key={w}>{w} <b>×{n}</b></span>)}</div>
-        )}
+        <AhCounterBody a={aRep} />
       </div>
 
       <div className="card">
@@ -6389,13 +6033,18 @@ function DebateMode({ mic, onFinish, lib, profile }) {
         <div className="stat"><span>Reasoning connectives</span><b>{r.connectives}</b></div>
         <div className="stat"><span>Closed the case</span>
           <b className={r.hasClose ? "ok" : "bad"}>{r.hasClose ? "yes" : "no"}</b></div>
-        {r.counterHits === 0 && (
+        {r.counterHits === 0 && (r.isEnglish ? (
           <div className="note badl" style={{ marginTop: 12 }}>
             You never mentioned the other side. Even one sentence — “some would argue X, but…” — makes
             a case look considered rather than rehearsed, and it's the cheapest mark on the sheet.
           </div>
-        )}
-        {r.evidenceHits === 0 && (
+        ) : (
+          <div className="note warnl" style={{ marginTop: 12 }}>
+            This count only recognises English phrasing for raising the other side, so it may be missing
+            it here — the number above isn't a reliable zero in {langName(r.lang.primary)}.
+          </div>
+        ))}
+        {r.evidenceHits === 0 && r.isEnglish && (
           <div className="note warnl" style={{ marginTop: 12 }}>
             No example, no number, no case. Assertion is the default; evidence is what separates you
             from the person who read the same headline.
@@ -6611,17 +6260,11 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
 
         <div className="card coral">
           <RoleHead role={ROLES[1]} />
-          <p style={{ fontSize: 15, lineHeight: 1.65 }}>{aRep.line}</p>
-          {aRep.rows.length > 0 && (
-            <div className="tally">
-              {aRep.rows.map(([w, n]) => <span className="tchip" key={w}>{w} <b>×{n}</b></span>)}
-            </div>
-          )}
-          {r.stumbles.length > 0 && (
+          <AhCounterBody a={aRep} extra={r.stumbles.length > 0 && (
             <p className="ex" style={{ marginTop: 10 }}>
               Also {r.stumbles.length} restart{r.stumbles.length === 1 ? "" : "s"} — “{r.stumbles[0].phrase}”. That's the sound of a sentence being rebuilt mid-air.
             </p>
-          )}
+          )} />
         </div>
 
         <div className="card moss">
@@ -6683,7 +6326,6 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
             vocab: ["Same few words", `${r.variety}% variety`, r.range >= 55],
             long: ["Long sentences", r.concise.longOnes.length, r.concise.longOnes.length === 0],
             repeat: ["Repeating myself", r.concise.repeatedIdeas.length, r.concise.repeatedIdeas.length === 0],
-            passive: ["Passive phrasing", r.concise.passive.length, r.concise.passive.length <= 1],
             structure: ["No clear point", r.hasStance ? "took a position" : "no position", r.structure >= 60],
             blank: ["Going blank", r.mode === "mic" ? `${Math.max(0, r.seconds - r.voiced)}s silence` : "—", r.mode !== "mic" || (r.seconds - r.voiced) <= 8],
             nerves: ["Nerves", `${r.hedgeCount} hedges`, r.hedgeCount <= 3],
@@ -6723,7 +6365,18 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
             Range is vocabulary reach: {r.sophistication}% of your content words went beyond the
             everyday two thousand{r.vagueCount ? `, and ${r.vagueCount} vague word${r.vagueCount === 1 ? "" : "s"} pulled it down` : ""}.
           </p>
-          <div className="eye">Commendation</div>
+          {ai && (ai.structure || ai.flow || ai.content || ai.language || ai.coverage) && (
+            <>
+              <div className="eye" style={{ marginTop: 14 }}>The full picture</div>
+              {[["Structure", ai.structure], ["Flow", ai.flow], ["Content", ai.content],
+                ["Language", ai.language], ["Coverage", ai.coverage]].filter(([, v]) => v).map(([label, text]) => (
+                <p key={label} style={{ fontSize: 14.5, lineHeight: 1.6, margin: "8px 0 0" }}>
+                  <b>{label}.</b> {text}
+                </p>
+              ))}
+            </>
+          )}
+          <div className="eye" style={{ marginTop: 14 }}>Commendation</div>
           <p style={{ fontSize: 15.5, lineHeight: 1.65, marginTop: 6 }}>{ai && ai.commend ? ai.commend : eRep.commend}</p>
           <div className="eye" style={{ marginTop: 14 }}>Recommendation</div>
           <div className="note">{ai && ai.recommend ? ai.recommend : eRep.recommend}</div>
@@ -6761,7 +6414,6 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
             <span><i style={{ background: "#ffc857" }} />hedge</span>
             <span><i style={{ background: "#a79fd4" }} />no work</span>
             <span><i style={{ background: "#ff9f45" }} />wordy</span>
-            <span><i style={{ background: "#56c8f5" }} />passive</span>
             <span><i style={{ background: "#9d80ff" }} />repeated idea</span>
           </div>
           <div className="stat" style={{ marginTop: 10 }}><span>Speed</span><b className={r.wpm >= 110 && r.wpm <= 170 ? "ok" : "warn"}>{r.wpm} wpm</b></div>
@@ -7283,8 +6935,7 @@ function GroupDiscussion({ mic, onFinish, lib }) {
 
           <div className="card coral">
             <RoleHead role={ROLES[1]} />
-            <p style={{ fontSize: 15, lineHeight: 1.65 }}>{gdAh.line}</p>
-            {gdAh.rows.length > 0 && <div className="tally">{gdAh.rows.map(([w, n]) => <span className="tchip" key={w}>{w} <b>×{n}</b></span>)}</div>}
+            <AhCounterBody a={gdAh} />
           </div>
 
           <div className="card moss">
@@ -7547,10 +7198,6 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
             <div className="abox">{agenda.gd ? "✓" : "3"}</div>
             <div><b>Group discussion</b><span>Five minutes with the panel. The hard one.</span></div>
           </button>
-          <button className="aitem" onClick={() => go("camera")}>
-            <div className="abox"><Icon name="mic" size={15} /></div>
-            <div><b>Camera practice</b><span>Record, fix one thing, record again.</span></div>
-          </button>
           <button className="aitem" onClick={() => go("debate")}>
             <div className="abox"><Icon name="chat" size={15} /></div>
             <div><b>Debate a motion</b><span>Pick a side, prep, then defend it on the clock.</span></div>
@@ -7675,73 +7322,6 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
 }
 
 /* -------------------------------- KEY BAR -------------------------------- */
-
-function KeyBar() {
-  const [inFrame] = useState(() => { try { return window.self !== window.top; } catch (e) { return true; } });
-  const [key, setKey] = useState(() => storedKey());
-  const [proxy, setProxy] = useState(() => proxyUrl());
-  const [open, setOpen] = useState(false);
-  const [has, setHas] = useState(() => storedKey().length > 0 || proxyUrl().length > 0);
-  // Groq now runs the Evaluator by default, with its key on the server —
-  // nothing to type in for that. This just confirms it's actually configured
-  // rather than showing a stale "off" forever because no browser key was set.
-  const [groqOn, setGroqOn] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/groq/status").then((r) => r.json()).then((j) => { if (!cancelled) setGroqOn(!!j.ready); })
-      .catch(() => { if (!cancelled) setGroqOn(false); });
-    return () => { cancelled = true; };
-  }, []);
-  if (inFrame) return null;
-  const save = () => {
-    try {
-      window.localStorage.setItem("yap_key", key.trim());
-      window.localStorage.setItem("yap:proxy", proxy.trim());
-    } catch (e) { /* private mode */ }
-    setHas(key.trim().length > 0 || proxy.trim().length > 0); setOpen(false);
-  };
-  // an explicit Claude proxy/key is a deliberate choice and overrides Groq
-  // (see askClaude) — so reflect that priority here rather than Groq always
-  // winning the label.
-  const via = has ? "Claude" : groqOn ? "Groq" : null;
-  const on = groqOn === null ? has : (has || groqOn);
-  return (
-    <div className="card" style={{ padding: 14 }}>
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <span className="eye">Written evaluations · {on ? "on" : "off"}{via ? ` (${via})` : ""}</span>
-        <button className="btn sm" onClick={() => setOpen((v) => !v)}>{open ? "Close" : "Claude settings"}</button>
-      </div>
-      {open && (
-        <>
-          <p className="ex" style={{ marginTop: 12 }}>
-            {has
-              ? "A Claude proxy or key is set below, so it's used instead of the Groq default. Clear both and save to go back to Groq."
-              : groqOn
-              ? "Groq is already running the Evaluator, the panel and the vocab judge — nothing to set up. The fields below only matter if you'd rather use Claude instead."
-              : "Groq isn't configured on this server yet (set GROQ_API_KEY and restart). Until then, or if you'd rather use Claude, connect it below."}
-          </p>
-          <div className="eye" style={{ marginTop: 12 }}>Recommended · server proxy</div>
-          <input className="typebox" style={{ fontFamily: "var(--mon)", fontSize: 13 }}
-            aria-label="Claude proxy URL" value={proxy} onChange={(e) => setProxy(e.target.value)}
-            placeholder="http://localhost:8787/api/claude" />
-          <p className="ex" style={{ marginTop: 6 }}>
-            Run <b>ANTHROPIC_API_KEY=sk-… node server.js</b> and point here. The key stays on the server.
-          </p>
-          <div className="eye" style={{ marginTop: 14 }}>Or · key in this browser</div>
-          <Writer value={key} onChange={setKey} rows={2} placeholder="sk-ant-… — local machine only" />
-          <div className="warnbox" style={{ marginTop: 10, marginBottom: 0 }}>
-            A key stored in the browser can be read by anyone with access to this device or by any
-            script on the page. Fine on your own laptop; never do this on a public domain.
-          </div>
-          <div className="row" style={{ marginTop: 10 }}><button className="btn leaf sm" onClick={save}>Save</button></div>
-          <p className="ex" style={{ marginTop: 8 }}>
-            The Timer, Ah-Counter and Grammarian all run without any of this either way.
-          </p>
-        </>
-      )}
-    </div>
-  );
-}
 
 /* ==========================================================================
    ONBOARDING — one continuous scene, not eight pages.
@@ -7876,7 +7456,6 @@ const BLOCKS = [
   { id: "vocab", label: "Same few words", shape: "sq", watches: "Range" },
   { id: "long", label: "Long sentences", shape: "cap", watches: "Conciseness" },
   { id: "repeat", label: "Repeating myself", shape: "", watches: "Conciseness" },
-  { id: "passive", label: "Passive phrasing", shape: "sq", watches: "Conciseness" },
   { id: "structure", label: "No clear point", shape: "cap", watches: "Structure" },
 ];
 
@@ -8387,7 +7966,6 @@ const TABS = [
   { id: "club", label: "Meeting" },
   { id: "topics", label: "Table Topics" },
   { id: "debate", label: "Debate" },
-  { id: "camera", label: "On camera" },
   { id: "vocab", label: "Vocabulary" },
   { id: "gd", label: "Group discussion" },
   { id: "interview", label: "Mock interview" },
@@ -8447,7 +8025,7 @@ function YapApp() {
 
   return (
     <div className="grdn">
-      <style>{CSS}</style><style>{ONB_CSS}</style><style>{IV_CSS}</style><style>{ROOM_CSS}</style><style>{DEBATE_CSS}</style><style>{CAM_CSS}</style>
+      <style>{CSS}</style><style>{ONB_CSS}</style><style>{IV_CSS}</style><style>{ROOM_CSS}</style><style>{DEBATE_CSS}</style>
       <div className="wrap">
         <header className="top">
           <div className="mark">
@@ -8468,13 +8046,11 @@ function YapApp() {
         </nav>
 
         <LanguageBar mic={mic} />
-        <KeyBar />
 
         <div className="panel" key={tab} role="tabpanel" aria-label={(TABS.find((t) => t.id === tab) || {}).label}>
         {tab === "club" && <Club days={days} setDays={setDays} active={active} setActive={setActive}
           stats={stats} agenda={agenda} go={setTab} wotd={wotd} lib={lib}
           profile={profile} replay={() => setIntro(true)} />}
-        {tab === "camera" && <CameraPractice mic={mic} onFinish={onFinish} lib={lib} />}
         {tab === "debate" && <DebateMode mic={mic} onFinish={onFinish} lib={lib} profile={profile} />}
         {tab === "topics" && <TableTopics mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} profile={profile} />}
         {tab === "vocab" && <Vocabulary mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} />}

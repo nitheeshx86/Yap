@@ -27,8 +27,15 @@ export async function POST(request) {
   const mode = incoming.get("mode") || "verbatim";
   const languageCode = incoming.get("language_code");
 
+  // Chrome's MediaRecorder tags the blob "audio/webm;codecs=opus", and
+  // Sarvam allowlists file types by exact string match — "audio/webm" is on
+  // it, "audio/webm;codecs=opus" isn't, so every real recording 400ed with
+  // "Invalid file type". Re-wrap with the codec parameter stripped.
+  const bareType = (file.type || "").split(";")[0].trim() || "audio/webm";
+  const cleanFile = new File([await file.arrayBuffer()], "speech.webm", { type: bareType });
+
   const fd = new FormData();
-  fd.append("file", file, "speech.webm");
+  fd.append("file", cleanFile, "speech.webm");
   fd.append("model", SARVAM_STT_MODEL);
   fd.append("mode", mode);
   if (languageCode) fd.append("language_code", languageCode);
@@ -47,6 +54,7 @@ export async function POST(request) {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    console.error("[sarvam/stt]", res.status, text || res.statusText, "| fileType:", file.type, "| size:", file.size);
     return NextResponse.json({ error: text || res.statusText }, { status: res.status });
   }
 
