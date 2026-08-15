@@ -3097,51 +3097,6 @@ function Notice({ mic }) {
 
 /* Sarvam's transcript, offered next to the live one. It is usually the better
    record for anything that isn't plain English, but the user decides. */
-function SarvamPanel({ sarvam, onUse }) {
-  if (!sarvam) return null;
-  const isWhisper = sarvam.source === "groq";
-  if (sarvam.state === "working") {
-    return <p className="ex" style={{ marginTop: 10 }}><span className="spin" />
-      re-reading the recording for {isWhisper || langName(replyLangCode()) === "English" ? "accuracy" : "your language"}…</p>;
-  }
-  if (sarvam.state === "failed") {
-    return <div className="tip" style={{ marginTop: 10 }}>
-      {isWhisper ? "The accuracy pass" : "Multilingual transcription"} is unavailable right now. The live
-      transcript above still stands, and your recording is saved either way.
-    </div>;
-  }
-  if (sarvam.state !== "done" || !sarvam.text) return null;
-  return (
-    <div className="card sky" style={{ marginTop: 12 }}>
-      <div className="eye">
-        {isWhisper ? "Re-checked transcript" : "Multilingual transcript"}
-        {sarvam.language && !isWhisper ? ` · heard as ${langName(sarvam.language)}` : ""}
-        {typeof sarvam.confidence === "number" ? ` · ${Math.round(sarvam.confidence * 100)}% sure` : ""}
-      </div>
-      <div className="script" style={{ marginTop: 8, fontSize: 16 }}>{sarvam.text}</div>
-      {onUse && (
-        <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn sm go" onClick={() => onUse(sarvam.text)}>Score this version instead</button>
-        </div>
-      )}
-      <p className="ex" style={{ marginTop: 8 }}>
-        {isWhisper
-          ? "Live transcription runs in the browser and can drop or mishear words. This pass re-reads the actual recording, so it is the truer record to be scored on."
-          : "Live transcription is English-first. This pass understands Indian languages and code-mixing, " +
-            "and it keeps every filler word rather than tidying them away — so it is both the truer record " +
-            "and the fairer one to be scored on."}
-      </p>
-      {typeof sarvam.confidence === "number" && sarvam.confidence < 0.6 && (
-        <p className="ex" style={{ marginTop: 6, color: "var(--coral)" }}>
-          It wasn't confident about the language here. If this reads wrong, it's the recogniser
-          struggling with the audio, not your speech — try somewhere quieter or set your language
-          explicitly instead of leaving it on auto.
-        </p>
-      )}
-    </div>
-  );
-}
-
 /* Turn any piece of YAP's coaching into the user's language, on demand. */
 function TranslateButton({ text, label = "Read this in my language" }) {
   const [out, setOut] = useState(null);
@@ -6062,8 +6017,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
         <RomanToggle text={r.text} from={r.lang && r.lang.primary} />
       </div>
 
-      <SarvamPanel sarvam={mic.sarvam} />
-
       {gRep.errs.length > 0 && (
         <div className="card">
           <div className="eye" style={{ marginBottom: 10 }}>Grammar</div>
@@ -6146,16 +6099,6 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
   const typedRef = useRef(""); typedRef.current = typed;
   const modeRef = useRef("mic"); modeRef.current = mode;
   const pool = useMemo(() => cat.flatMap((c) => allTopics[c] || []), [cat, allTopics]);
-
-  /* Re-run the whole report on a different transcript of the same take. */
-  const rescore = useCallback((text) => {
-    const r0 = analyse(text, (rep && rep.r.seconds) || 60, "mic");
-    const tRep = timerReport(r0.seconds, slot);
-    const usedW = usedWord(wotd.w, text);
-    setRep({ r: r0, tRep, aRep: ahReport(r0), gRep: gramReport(r0, wotd, usedW),
-      eRep: evalReport(r0, tRep), usedW, slot });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rep, slot, wotd]);
 
   const finish = useCallback(async (forced) => {
     const secs = typeof forced === "number" ? forced : Math.max(1, watch.value());
@@ -6348,8 +6291,6 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
             </div>
           );
         })()}
-
-        <SarvamPanel sarvam={mic.sarvam} onUse={(t) => rescore(t)} />
 
         <ClarityCard r={r} aiRewrites={ai && ai.rewrites} />
 
@@ -7122,7 +7063,6 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
         <div className={"card " + (result.correct ? "moss" : "coral")}>
           <div className="eye">{result.correct ? "It's yours" : result.used ? "Close" : "Not yet"}</div>
           {said && <p className="ex" style={{ margin: "8px 0" }}>You said: “{said}”</p>}
-          <SarvamPanel sarvam={mic.sarvam} />
           <div className={"note " + (result.correct ? "" : "badl")}>{result.verdict}</div>
           {result.usage && (
             <div className="tally" style={{ marginTop: 12 }}>
