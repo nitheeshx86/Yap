@@ -2952,16 +2952,11 @@ function RomanToggle({ text, from }) {
   );
 }
 
-const COMMON_LANGS = ["en-IN", "hi-IN", "ta-IN"];
-
 function LanguageBar({ mic }) {
   const [reply] = usePersisted("replyLang", "en-IN");
   const [open, setOpen] = useState(false);
-  const [showMore, setShowMore] = useState(false);
   const spoken = mic.lang;
   const spokenLabel = (MIC_LANGS.find((l) => l.id === spoken) || {}).label || spoken;
-  const common = MIC_LANGS.filter((l) => COMMON_LANGS.includes(l.id));
-  const more = MIC_LANGS.filter((l) => !COMMON_LANGS.includes(l.id));
   return (
     <div className="card" style={{ padding: 14 }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -2972,27 +2967,16 @@ function LanguageBar({ mic }) {
         <>
           <div className="eye" style={{ marginTop: 14 }}>I speak</div>
           <div className="row" style={{ marginTop: 8 }}>
-            {common.map((l) => (
+            {MIC_LANGS.map((l) => (
               <button key={l.id} className="chip" data-on={spoken === l.id ? "1" : "0"}
                 onClick={() => mic.setLang(l.id)}>{l.label}</button>
             ))}
-            {!showMore && (
-              <button className="ghostlink" onClick={() => setShowMore(true)}>More languages →</button>
-            )}
           </div>
-          {showMore && (
-            <div className="row" style={{ marginTop: 8 }}>
-              {more.map((l) => (
-                <button key={l.id} className="chip" data-on={spoken === l.id ? "1" : "0"}
-                  onClick={() => mic.setLang(l.id)}>{l.label}</button>
-              ))}
-            </div>
-          )}
-          <div className="tip" style={{ marginTop: 12 }}>
+          <p className="ex" style={{ marginTop: 12 }}>
             Speak however you actually speak — mixing Hindi and English in one sentence is normal and
             YAP scores it as one answer, not as a mistake. Your words are analysed in the language
             you said them; only the coaching is translated.
-          </div>
+          </p>
         </>
       )}
     </div>
@@ -3013,6 +2997,10 @@ function Playback({ clip, label = "Your recording" }) {
       </p>
     </div>
   );
+}
+
+function Writer({ value, onChange, placeholder, rows = 5 }) {
+  return <textarea className="typebox" rows={rows} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />;
 }
 
 const ROLE_MOOD = { timer: "thinking", ah: "focused", gram: "focused", eval: "encouraging" };
@@ -3435,13 +3423,12 @@ const DEBATE_CSS = `
 .stancecard span{font-size:13px;color:var(--ink2);line-height:1.5}
 .stancecard[data-on="1"]{border-color:currentColor;background:var(--surf2);box-shadow:0 10px 26px rgba(31,79,91,.1)}
 .stancecard[data-on="1"] span{color:inherit;opacity:.8}
-.flow{display:flex;align-items:center;margin:0 0 18px}
-.flow i{flex:0 0 auto;font-style:normal;font-family:var(--bod);font-weight:700;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--ink3);border:1px solid var(--line);border-radius:999px;padding:6px 12px;white-space:nowrap;background:var(--surf1);transition:.25s cubic-bezier(.2,.9,.3,1)}
-.flow i[data-on="1"]{background:var(--ocean);border-color:var(--ocean);color:#fff;font-size:10.5px;padding:7px 14px;box-shadow:0 6px 14px rgba(126,200,227,.3)}
+.flow{display:flex;gap:4px;align-items:center;margin:0 0 18px;flex-wrap:wrap}
+.flow i{font-style:normal;font-family:var(--bod);font-weight:600;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink3);border:1px solid var(--line);border-radius:999px;padding:5px 11px;white-space:nowrap;background:var(--surf1)}
+.flow i[data-on="1"]{background:var(--ocean);border-color:var(--ocean);color:#fff}
 .flow i[data-done="1"]{border-color:var(--good);color:var(--good)}
-.flow em{flex:1 1 16px;min-width:10px;height:1px;background:var(--line);margin:0 5px;font-size:0}
-.flow em[data-done="1"]{background:var(--good)}
+.flow em{font-style:normal;color:var(--ink3);opacity:.6;font-size:11px}
 .prepgrid{display:flex;gap:8px;flex-wrap:wrap}
 .preptile{flex:1 1 90px;border:1px solid var(--line);background:var(--surf1);border-radius:16px;
   padding:12px 8px;cursor:pointer;text-align:center;font-family:var(--bod);color:var(--ink);transition:.2s cubic-bezier(.2,.9,.3,1)}
@@ -3479,7 +3466,7 @@ function FlowRail({ at }) {
       {steps.map(([k, label], i) => (
         <React.Fragment key={k}>
           <i data-on={i === idx ? "1" : "0"} data-done={i < idx ? "1" : "0"}>{label}</i>
-          {i < steps.length - 1 && <em data-done={i < idx ? "1" : "0"}>→</em>}
+          {i < steps.length - 1 && <em>→</em>}
         </React.Fragment>
       ))}
     </div>
@@ -3553,13 +3540,10 @@ function DebateMode({ mic, onFinish, lib, profile }) {
   const startSpeaking = async () => {
     setTyped("");
     const ok = await mic.start();
-    if (!ok) {
-      alert("Microphone access is required. Please allow microphone access in your browser settings.");
-      return;
-    }
-    setMode("mic");
+    setMode(ok ? "mic" : "type");
     setStage("live"); watch.start();
   };
+  const writeInstead = () => { setTyped(""); setMode("type"); setStage("live"); watch.start(); };
 
   const reset = () => {
     setStage("stance"); setStance(null); setBrief(null); setBriefState("idle");
@@ -3596,12 +3580,12 @@ function DebateMode({ mic, onFinish, lib, profile }) {
         <div className="card sky">
           <div className="eye">The motion</div>
           <div className={"topic" + (spinning ? " fade" : "")} style={{ minHeight: "auto", marginTop: 6 }}>{topic}</div>
-          <div className="row" style={{ marginTop: 12, alignItems: "center" }}>
+          <div className="row" style={{ marginTop: 12 }}>
             <button className="btn sm" onClick={() => spinMotion(pool)} disabled={spinning}>
               {spinning ? "Spinning…" : "Spin for a motion"}
             </button>
             {(lib.topics || []).length > 0 && (
-              <button className="ghostlink" onClick={() => spinMotion(lib.topics.map((t) => t.text))} disabled={spinning}>From my library</button>
+              <button className="btn sm" onClick={() => spinMotion(lib.topics.map((t) => t.text))} disabled={spinning}>From my library</button>
             )}
           </div>
         </div>
@@ -3611,7 +3595,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
           <div className="stance">
             {STANCES.map((st) => (
               <button key={st.id} className="stancecard" data-on={stance === st.id ? "1" : "0"}
-                style={{ color: stance === st.id ? st.colour : undefined, borderLeft: `4px solid ${st.colour}` }}
+                style={{ color: stance === st.id ? st.colour : undefined }}
                 aria-pressed={stance === st.id} onClick={() => setStance(st.id)}>
                 <b>{st.label}</b><span>{st.blurb}</span>
               </button>
@@ -3859,13 +3843,14 @@ function DebateMode({ mic, onFinish, lib, profile }) {
               {slot.label} on the clock. Green at {fmt(slot.green)}, red at {fmt(slot.red)}.
             </p>
             <div className="row">
-              <button className="btn go" style={{ width: "100%" }} onClick={startSpeaking}>
+              <button className="btn go" onClick={startSpeaking}>
                 <span><Icon name="mic" size={18} /> Speak now</span></button>
+              <button className="btn" onClick={writeInstead}>Write it</button>
             </div>
           </div>
         ) : (
           <div className="card coral">
-            <div className="tag">on the clock</div>
+            <div className="tag">{mode === "mic" ? "on the clock" : "writing"}</div>
             <div className={"clock" + (watch.t > slot.red ? " over" : "")}>
               {fmt(watch.t)} <small>of {slot.label}</small>
             </div>
@@ -3874,10 +3859,17 @@ function DebateMode({ mic, onFinish, lib, profile }) {
                 style={{ width: `${Math.min(100, (watch.t / slot.red) * 100)}%` }} />
             </div>
             <Signal elapsed={watch.t} slot={slot} />
-            <Grass level={mic.level} live={mic.speaking} />
-            <div className="script" style={{ marginTop: 10 }}>
-              {mic.finalText}<span className="interim">{mic.interim}</span>
-            </div>
+            {mode === "mic" ? (
+              <>
+                <Grass level={mic.level} live={mic.speaking} />
+                <div className="script" style={{ marginTop: 10 }}>
+                  {mic.finalText}<span className="interim">{mic.interim}</span>
+                </div>
+              </>
+            ) : (
+              <Writer value={typed} onChange={setTyped} rows={7}
+                placeholder="Argue it the way you'd say it out loud." />
+            )}
             <div className="row" style={{ marginTop: 14 }}>
               <button className="btn leaf" onClick={() => finish()}>Finish</button>
             </div>
@@ -4119,13 +4111,10 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
   const record = async () => {
     setTyped("");
     const ok = await mic.start();
-    if (!ok) {
-      alert("Microphone access is required. Please allow microphone access in your browser settings.");
-      return;
-    }
-    setMode("mic");
+    setMode(ok ? "mic" : "type");
     setPhase("live"); watch.start();
   };
+  const write = () => { setTyped(""); setMode("type"); setPhase("live"); watch.start(); };
 
   if (phase === "report" && rep) {
     const { r, tRep, aRep, gRep, eRep, usedW } = rep;
@@ -4319,7 +4308,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
         <div className="card">
           <div className="eye">The transcript{r.lang && !r.isEnglish ? ` · ${langName(r.lang.primary)}` : ""}</div>
           <div className="script" style={{ marginTop: 8 }}>
-            {r.text ? renderClarity(r.text, r) : <span className="ex">Nothing came through. Check your microphone and try again.</span>}
+            {r.text ? renderClarity(r.text, r) : <span className="ex">Nothing came through. Check the mic, or write it instead.</span>}
           </div>
           <RomanToggle text={r.text} from={r.lang && r.lang.primary} />
           <div className="legend">
@@ -4412,17 +4401,24 @@ function TableTopics({ mic, onFinish, wotd, lib, profile }) {
 
       {phase === "live" && (
         <div className="card coral">
-          <div className="tag">on the clock</div>
+          <div className="tag">{mode === "mic" ? "on the clock" : "writing"}</div>
           <div className={"clock" + (watch.t > slot.red ? " over" : "")}>{fmt(watch.t)} <small>of {slot.label}</small></div>
           <div className="vine">
             <i className={watch.t >= slot.red ? "r" : watch.t >= slot.amber ? "a" : ""}
               style={{ width: `${Math.min(100, (watch.t / slot.red) * 100)}%` }} />
           </div>
           <Signal elapsed={watch.t} slot={slot} />
-          <Grass level={mic.level} live={mic.speaking} />
-          <div className="script" style={{ marginTop: 10 }} role="log" aria-live="polite" aria-atomic="false">
-            {mic.finalText}<span className="interim">{mic.interim}</span>
-          </div>
+          {mode === "mic" ? (
+            <>
+              <Grass level={mic.level} live={mic.speaking} />
+              <div className="script" style={{ marginTop: 10 }} role="log" aria-live="polite" aria-atomic="false">
+                {mic.finalText}<span className="interim">{mic.interim}</span>
+              </div>
+            </>
+          ) : (
+            <Writer value={typed} onChange={setTyped} rows={7}
+              placeholder="Write it the way you'd say it out loud — fillers and all, because that's what the Ah-Counter tallies." />
+          )}
           <div className="row" style={{ marginTop: 14 }}>
             <button className="btn leaf" onClick={() => finish()}>Finish speech</button>
           </div>
@@ -4459,7 +4455,7 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
     const text = (m === "type" ? typedRef.current : mic.bestText().text).trim();
     setSaid(text);
     if (!text) {
-      setResult({ used: false, correct: false, verdict: "Nothing came through. Check your microphone and try again.", better: "", grammar: [] });
+      setResult({ used: false, correct: false, verdict: "Nothing came through. Record again, or write it instead.", better: "", grammar: [] });
       setPhase("result"); return;
     }
     // Local judgement first: did they use it, or merely mention it?
@@ -4522,9 +4518,6 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
 
       <div className={"card " + (isWotd ? "sun" : "sky")}>
         {isWotd && <div className="tag">word of the day</div>}
-        {phase !== "live" && (
-          <button className="ghostlink" style={{ position: "absolute", top: 22, right: 24 }} onClick={next}>Next word →</button>
-        )}
         <div className="flip" data-flip={flipped ? "1" : "0"} onClick={() => phase !== "live" && setFlipped((v) => !v)}>
           <div className="flip-in">
             <div className="flip-face">
@@ -4546,17 +4539,13 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
           <>
             <div className="clock" style={{ marginTop: 14 }}>{fmt(watch.t)} <small>of 0:30</small></div>
             <div className="vine"><i style={{ width: `${(watch.t / 30) * 100}%` }} /></div>
-            <Grass level={mic.level} live={mic.speaking} />
-            <div className="script" style={{ fontSize: 15.5, minHeight: 30 }}>
-              {mic.finalText}<span className="interim">{mic.interim}</span>
-            </div>
-          </>
         )}
 
         <div className="row" style={{ marginTop: 18 }}>
-          {phase === "idle" && <button className="btn go" style={{ flex: 1 }} onClick={record}>Say it in 30s</button>}
+          {phase === "idle" && <button className="btn go" onClick={record}>Say it in 30s</button>}
           {phase === "live" && <button className="btn leaf" onClick={judge}>Done</button>}
           {phase !== "live" && <button className="btn" onClick={() => setFlipped((v) => !v)}>{flipped ? "Back to the word" : "Flip the card"}</button>}
+          {phase !== "live" && <button className="btn" onClick={next}>Next word</button>}
         </div>
       </div>
 
@@ -4591,24 +4580,19 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
           )}
           <div className="row" style={{ marginTop: 16 }}>
             <button className="btn go" onClick={next}>Next word</button>
-            <button className="btn" onClick={record}>Try again</button>
+            <button className="btn" onClick={mode === "type" ? write : record}>Try again</button>
           </div>
         </div>
       )}
 
       <div className="card">
         <div className="eye">Your bank · {bank.length} of {deck.length}</div>
-        {bank.length === 0 ? (
-          <div className="emptystate"><Mascot mood="curious" size={78} />
-            <span className="ex">Empty so far. Use a word correctly out loud and it lands here.</span></div>
-        ) : (
-          <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
-            <Mascot mood={bank.length >= 6 ? "excited" : "happy"} size={40} />
-            <div className="bank" style={{ marginTop: 0, flex: 1 }}>
-              {bank.map((w) => <span key={w} className="seed">{w}</span>)}
-            </div>
-          </div>
-        )}
+        <div className="bank">
+          {bank.length === 0
+            ? <div className="emptystate"><Mascot mood="curious" size={78} />
+                <span className="ex">Empty so far. Use a word correctly out loud and it lands here.</span></div>
+            : bank.map((w) => <span key={w} className="seed">{w}</span>)}
+        </div>
       </div>
     </div>
   );
