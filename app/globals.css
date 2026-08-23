@@ -1,3 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ocean-blue: #0A9EC4;
+  --color-deep-ocean: #087EA4;
+  --color-lagoon: #6FD7F0;
+  --color-foam: #EAFBFF;
+  --color-warm-sand: #F8F3E8;
+  --color-palm-green: #5AAE5A;
+  --color-coral: #FF8C69;
+  --color-gold: #F6C76A;
+  --color-ink: #13394A;
+
+  --radius-card: 32px;
+  --radius-btn: 999px;
+  --radius-dock: 28px;
+}
+
 html,
 body {
   margin: 0;

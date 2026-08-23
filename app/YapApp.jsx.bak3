@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AuthBar } from "@/components/AuthBar";
-import { useAuth } from "@/lib/supabase/useAuth";
 
 /* ============================================================================
    YAP — speak · practice · evolve
@@ -12,7 +11,7 @@ import { useAuth } from "@/lib/supabase/useAuth";
 
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
-.grdn{--mist:#EAF8FB;--foam:#D6F0F6;--ocean:#7EC8E3;--ocean-deep:#5FAECB;--sand:#F8F2E7;--sand-warm:#EEDBB8;--coral:#FF9F7F;--coral-deep:#E8674A;--ink:#1F4F5B;--ink2:#45636B;--ink3:#7A939A;--line:rgba(31,79,91,.14);--good:#7BAE8F;--warn:#C99A4B;--bad:#E8674A;--surf1:rgba(255,255,255,.55);--surf2:rgba(255,255,255,.8);--dis:"Baloo 2",system-ui,sans-serif;--bod:Manrope,system-ui,sans-serif;background:linear-gradient(180deg,var(--mist) 0%,var(--foam) 38%,var(--sand) 100%);color:var(--ink);font-family:var(--bod);min-height:100%;padding-bottom:150px;position:relative;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+.grdn{--mist:#EAF8FB;--foam:#D6F0F6;--ocean:#7EC8E3;--ocean-deep:#5FAECB;--sand:#F8F2E7;--sand-warm:#EEDBB8;--coral:#FF9F7F;--coral-deep:#E8674A;--ink:#1F4F5B;--ink2:#45636B;--ink3:#7A939A;--line:rgba(31,79,91,.14);--good:#7BAE8F;--warn:#C99A4B;--bad:#E8674A;--surf1:rgba(255,255,255,.55);--surf2:rgba(255,255,255,.8);--dis:"Baloo 2",system-ui,sans-serif;--bod:Manrope,system-ui,sans-serif;background:linear-gradient(180deg,var(--mist) 0%,var(--foam) 38%,var(--sand) 100%);color:var(--ink);font-family:var(--bod);min-height:100%;padding-bottom:100px;position:relative;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .grdn *{box-sizing:border-box}
 .grdn button{font-family:var(--bod)}
 .grdn::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;background-image:radial-gradient(760px 420px at 12% 0%,rgba(126,200,227,.14),transparent 62%),radial-gradient(680px 460px at 92% 18%,rgba(255,159,127,.08),transparent 60%),radial-gradient(700px 520px at 45% 110%,rgba(238,219,184,.35),transparent 62%)}
@@ -21,24 +20,13 @@ const CSS = `
 .pot{display:flex;align-items:center;gap:8px;background:var(--surf1);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:999px;padding:6px 14px 6px 10px;box-shadow:0 8px 22px rgba(31,79,91,.08)}
 .pot b{font-family:var(--bod);font-weight:800;font-size:14px;font-variant-numeric:tabular-nums}
 .pot small{font-size:10.5px;color:var(--ink3);letter-spacing:.06em;text-transform:uppercase}
-.navdock{position:fixed;left:0;right:0;bottom:0;z-index:90;display:flex;justify-content:center;padding:0 16px calc(14px + env(safe-area-inset-bottom));pointer-events:none;transition:transform .38s cubic-bezier(.4,0,.2,1),opacity .3s}
-.navdock[data-hidden="1"]{transform:translateY(calc(100% + 24px));opacity:0}
-.navdock .nav{pointer-events:auto;width:100%;max-width:560px;margin-bottom:0}
-@media (prefers-reduced-motion:reduce){.navdock{transition:none}}
-.nav{display:flex;gap:6px;overflow-x:auto;padding:7px;background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);border:1px solid rgba(255,255,255,.8);border-radius:999px;margin-bottom:20px;scrollbar-width:none;position:relative;box-shadow:0 10px 34px rgba(31,79,91,.18),inset 0 1px 0 rgba(255,255,255,.9)}
+.nav{display:flex;gap:8px;overflow-x:auto;padding:8px;background:rgba(31,79,91,.08);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-radius:999px;margin-bottom:20px;scrollbar-width:none;position:relative}
 .nav::-webkit-scrollbar{display:none}
-.nav-slider{position:absolute;top:7px;bottom:7px;background:linear-gradient(145deg,var(--slide-c,var(--ocean)),color-mix(in srgb,var(--slide-c,var(--ocean)) 78%,#000));border-radius:999px;transition:left .42s cubic-bezier(.34,1.56,.5,1),width .42s cubic-bezier(.34,1.56,.5,1),background .3s;box-shadow:0 4px 14px rgba(var(--slide-g,126,200,227),.45),inset 0 1px 0 rgba(255,255,255,.35);pointer-events:none;z-index:0}
-.tab{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;border:none;background:transparent;color:var(--ink2);font-size:14px;font-weight:700;padding:10px 16px;border-radius:999px;cursor:pointer;transition:color .25s,transform .25s cubic-bezier(.34,1.56,.5,1);text-align:center;position:relative;z-index:1}
-.tab .tab-ico{font-size:16px;line-height:1;display:inline-block;transition:transform .35s cubic-bezier(.34,1.56,.5,1);filter:saturate(1.1)}
+.nav-slider{position:absolute;top:8px;bottom:8px;background:var(--ocean);border-radius:999px;transition:left .35s cubic-bezier(.4,.0,.2,1),width .35s cubic-bezier(.4,.0,.2,1);box-shadow:0 2px 8px rgba(126,200,227,.3);pointer-events:none;z-index:0}
+.tab{flex:1;border:none;background:transparent;color:var(--ink2);font-size:14px;font-weight:600;padding:10px 18px;border-radius:999px;cursor:pointer;transition:color .25s;text-align:center;position:relative;z-index:1}
 .tab:hover{color:var(--ink)}
-.tab:hover .tab-ico{transform:translateY(-2px) rotate(-8deg) scale(1.12)}
-.tab:active{transform:scale(.95)}
-.tab[data-on="1"]{color:#fff;text-shadow:0 1px 2px rgba(31,79,91,.25)}
-.tab[data-on="1"] .tab-ico{animation:tabpop .5s cubic-bezier(.34,1.56,.5,1)}
+.tab[data-on="1"]{color:#fff}
 .tab:focus-visible{outline:3px solid var(--ocean);outline-offset:2px}
-@keyframes tabpop{0%{transform:scale(.6) rotate(-18deg)}55%{transform:scale(1.3) rotate(8deg)}100%{transform:scale(1) rotate(0)}}
-@media (max-width:560px){.tab{font-size:0;gap:0;padding:10px 12px}.tab .tab-ico{font-size:20px}}
-@media (prefers-reduced-motion:reduce){.tab[data-on="1"] .tab-ico{animation:none}.nav-slider{transition:left .2s,width .2s}}
 .h1{font-family:var(--dis);font-weight:700;font-size:clamp(30px,7.6vw,44px);line-height:1.05;letter-spacing:-.02em;margin:16px 0 10px;text-wrap:balance;color:var(--ink)}
 .h1 em{font-style:normal;color:var(--ink);position:relative;display:inline-block;z-index:0}
 .h1 em::after{content:"";position:absolute;left:-6px;right:-6px;bottom:.06em;height:.4em;background:var(--sand-warm);border-radius:99px;z-index:-1}
@@ -410,6 +398,171 @@ const CSS = `
   .carousel-arrow.next {
     right: 8px;
   }
+}
+
+/* =====================================================================
+   TROPICAL CALM — Club / Meeting page redesign
+   ===================================================================== */
+
+/* ---- Beach scene root ---- */
+.beach-scene{position:relative;overflow:hidden;min-height:100vh;background:linear-gradient(180deg,#C8EEF7 0%,#9DDFF0 18%,#6FD7F0 36%,#0A9EC4 54%,#087EA4 68%,#F8F3E8 69%,#F8F3E8 100%)}
+.beach-scene *{box-sizing:border-box}
+
+/* ---- Sky layer ---- */
+.bs-sky{position:absolute;inset:0 0 31% 0;z-index:0;pointer-events:none;overflow:hidden}
+
+/* ---- Drifting clouds ---- */
+.bs-cloud{position:absolute;border-radius:999px;background:rgba(255,255,255,.72);filter:blur(18px);animation:cloudDrift linear infinite;pointer-events:none}
+.bs-cloud-1{width:180px;height:48px;top:10%;animation-duration:38s;animation-delay:-8s}
+.bs-cloud-2{width:120px;height:32px;top:18%;animation-duration:52s;animation-delay:-22s}
+.bs-cloud-3{width:220px;height:52px;top:6%;animation-duration:62s;animation-delay:-40s}
+@keyframes cloudDrift{from{transform:translateX(-260px)}to{transform:translateX(calc(100vw + 260px))}}
+
+/* ---- Sun ---- */
+.bs-sun{position:absolute;top:7%;right:18%;width:68px;height:68px;border-radius:50%;background:radial-gradient(circle,#F6C76A 40%,rgba(246,199,106,.0) 70%);box-shadow:0 0 0 16px rgba(246,199,106,.18),0 0 0 34px rgba(246,199,106,.08);animation:sunPulse 6s ease-in-out infinite;pointer-events:none}
+@keyframes sunPulse{0%,100%{box-shadow:0 0 0 16px rgba(246,199,106,.18),0 0 0 34px rgba(246,199,106,.08)}50%{box-shadow:0 0 0 22px rgba(246,199,106,.22),0 0 0 48px rgba(246,199,106,.06)}}
+
+/* ---- Ocean body ---- */
+.bs-ocean{position:absolute;left:0;right:0;bottom:31%;height:40%;background:linear-gradient(180deg,#6FD7F0 0%,#0A9EC4 55%,#087EA4 100%);z-index:1;pointer-events:none}
+
+/* ---- Wave layers ---- */
+.bs-waves{position:absolute;left:0;right:0;bottom:30.5%;height:80px;z-index:2;pointer-events:none;overflow:hidden}
+.bs-wave{position:absolute;bottom:0;left:-60%;width:220%;height:64px;border-radius:50% 50% 0 0 / 30px 30px 0 0;opacity:.85}
+.bs-wave-1{background:linear-gradient(180deg,#EAFBFF 0%,#6FD7F0 100%);animation:waveSurge 5.4s ease-in-out infinite}
+.bs-wave-2{background:linear-gradient(180deg,rgba(234,251,255,.7) 0%,#0A9EC4 100%);animation:waveSurge 7.1s ease-in-out infinite reverse;opacity:.55;bottom:6px}
+.bs-wave-3{background:rgba(255,255,255,.55);height:20px;bottom:54px;animation:waveSurge 9s ease-in-out infinite;opacity:.45;border-radius:50%}
+@keyframes waveSurge{0%,100%{transform:translateX(0) scaleY(1)}40%{transform:translateX(4%) scaleY(1.08)}70%{transform:translateX(-3%) scaleY(.94)}}
+
+/* ---- Seafoam strip ---- */
+.bs-foam-strip{position:absolute;left:0;right:0;bottom:30%;height:12px;z-index:3;pointer-events:none;background:linear-gradient(180deg,rgba(234,251,255,.9) 0%,transparent 100%);animation:foamPulse 3.8s ease-in-out infinite}
+@keyframes foamPulse{0%,100%{opacity:.9}50%{opacity:.55}}
+
+/* ---- Sand beach ---- */
+.bs-sand{position:absolute;left:0;right:0;bottom:0;height:31%;z-index:4;pointer-events:none;background:linear-gradient(180deg,#F8F3E8 0%,#EDE3C8 100%)}
+
+/* ---- Palm leaf overlays ---- */
+.bs-palm-left{position:absolute;left:-10px;top:24%;z-index:5;pointer-events:none;transform-origin:bottom left;animation:palmSway 6s ease-in-out infinite}
+.bs-palm-right{position:absolute;right:-10px;top:20%;z-index:5;pointer-events:none;transform-origin:bottom right;animation:palmSway 7s ease-in-out infinite reverse}
+@keyframes palmSway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+
+/* ---- Content scroll area ---- */
+.bs-content{position:relative;z-index:10;max-width:480px;margin:0 auto;padding:0 20px 120px;min-height:100vh}
+
+/* ---- Ocean Header ---- */
+.bs-header{display:flex;align-items:center;justify-content:space-between;padding:18px 0 12px}
+.bs-logo{display:flex;align-items:center;gap:8px}
+.bs-logo-text{font-family:var(--dis);font-weight:800;font-size:22px;letter-spacing:-.02em;color:#0A2E3A}
+.bs-logo-text i{font-style:normal;color:#FF8C69}
+.bs-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#6FD7F0,#0A9EC4);border:2.5px solid rgba(255,255,255,.8);box-shadow:0 4px 14px rgba(10,158,196,.25);display:grid;place-items:center;cursor:pointer;font-family:var(--dis);font-weight:700;font-size:14px;color:#fff;flex:0 0 40px}
+
+/* ---- Glassmorphism card base ---- */
+.glass-card{background:rgba(255,255,255,.72);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.85);border-radius:28px;box-shadow:0 8px 32px rgba(10,46,58,.1),0 1px 0 rgba(255,255,255,.9) inset;animation:glassIn .5s cubic-bezier(.2,.9,.3,1) both}
+@keyframes glassIn{from{opacity:0;transform:translateY(16px) scale(.98)}}
+.glass-card.warm{background:rgba(248,243,232,.88);border-color:rgba(238,219,184,.7)}
+.glass-card.ocean{background:rgba(111,215,240,.18);border-color:rgba(10,158,196,.25)}
+.glass-card:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(10,46,58,.13)}
+.glass-card{transition:transform .3s cubic-bezier(.2,.9,.3,1),box-shadow .3s}
+
+/* ---- Today's Mission Hero ---- */
+.mission-card{padding:28px 24px 24px;margin-bottom:20px;position:relative;overflow:hidden}
+.mission-card::before{content:"";position:absolute;top:-30px;right:-20px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(246,199,106,.35),transparent 70%);pointer-events:none}
+.mission-eyebrow{font-family:var(--bod);font-weight:700;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#5AAE5A;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.mission-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:#5AAE5A;display:inline-block}
+.mission-greeting{font-family:var(--dis);font-weight:700;font-size:clamp(22px,6vw,28px);line-height:1.15;letter-spacing:-.02em;color:#0A2E3A;margin:0 0 6px}
+.mission-goal{font-family:var(--bod);font-size:14.5px;color:#45636B;line-height:1.6;margin:0 0 24px;max-width:36ch}
+.mission-cta{width:100%;border:none;border-radius:999px;padding:17px 24px;font-family:var(--dis);font-weight:700;font-size:17px;cursor:pointer;background:linear-gradient(135deg,#0A9EC4,#087EA4);color:#fff;box-shadow:0 10px 28px rgba(10,158,196,.38);transition:.2s cubic-bezier(.2,.9,.3,1);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:10px}
+.mission-cta:hover{transform:translateY(-2px);box-shadow:0 16px 36px rgba(10,158,196,.45)}
+.mission-cta:active{transform:scale(.98)}
+.mission-cta::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at var(--rx,50%) var(--ry,50%),rgba(255,255,255,.3) 0%,transparent 60%);opacity:0;transition:opacity .4s}
+.mission-cta:active::after{opacity:1}
+.cta-wave-icon{display:inline-flex;align-items:center;gap:3px}
+.cta-wave-icon span{display:inline-block;width:3px;border-radius:99px;background:#fff;animation:ctaWave 1.2s ease-in-out infinite}
+.cta-wave-icon span:nth-child(1){height:8px;animation-delay:0s}
+.cta-wave-icon span:nth-child(2){height:14px;animation-delay:.15s}
+.cta-wave-icon span:nth-child(3){height:10px;animation-delay:.3s}
+.cta-wave-icon span:nth-child(4){height:16px;animation-delay:.1s}
+.cta-wave-icon span:nth-child(5){height:8px;animation-delay:.25s}
+@keyframes ctaWave{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.5)}}
+
+/* ---- Tap ripple ---- */
+@keyframes tapRipple{0%{transform:scale(0);opacity:.45}100%{transform:scale(4);opacity:0}}
+.ripple{position:absolute;border-radius:50%;background:rgba(10,158,196,.3);width:60px;height:60px;margin:-30px 0 0 -30px;pointer-events:none;animation:tapRipple .6s ease-out forwards}
+
+/* ---- Coconut Tree Streak card ---- */
+.streak-card{padding:22px 20px;margin-bottom:20px}
+.streak-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.streak-title{font-family:var(--dis);font-weight:700;font-size:18px;color:#0A2E3A;letter-spacing:-.01em}
+.streak-badge{background:linear-gradient(135deg,#F6C76A,#E8A800);color:#4A2E00;font-family:var(--bod);font-weight:700;font-size:11px;padding:5px 12px;border-radius:999px;letter-spacing:.06em}
+.coconut-tree-wrap{display:flex;align-items:flex-end;justify-content:center;padding:8px 0 4px;position:relative}
+.coconut-tree-wrap::after{content:"";position:absolute;bottom:0;left:10%;right:10%;height:10px;border-radius:50%;background:rgba(10,46,58,.1);filter:blur(6px)}
+.streak-stage-label{text-align:center;font-family:var(--dis);font-weight:700;font-size:15px;color:#0A2E3A;margin:6px 0 2px}
+.streak-stage-sub{text-align:center;font-family:var(--bod);font-size:12px;color:#7A939A;margin:0 0 14px}
+.streak-days-row{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
+.streak-day-pip{width:32px;height:32px;border-radius:50%;border:1.5px solid rgba(10,158,196,.2);background:rgba(248,243,232,.7);display:grid;place-items:center;font-family:var(--bod);font-weight:700;font-size:10px;color:#7A939A;transition:.25s cubic-bezier(.2,.9,.3,1);cursor:pointer;position:relative}
+.streak-day-pip.done{background:linear-gradient(135deg,#5AAE5A,#3D8C3D);border-color:#5AAE5A;color:#fff;transform:scale(1.05);box-shadow:0 3px 10px rgba(90,174,90,.3)}
+.streak-day-pip.today{border-color:#0A9EC4;border-width:2px;color:#0A9EC4}
+.streak-day-pip.missed{opacity:.45}
+.streak-coins-row{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;background:rgba(246,199,106,.15);border-radius:18px;border:1px dashed rgba(246,199,106,.5)}
+.coconut-coin{font-size:18px;animation:coinBounce .6s cubic-bezier(.2,1,.3,1) both}
+@keyframes coinBounce{from{opacity:0;transform:translateY(10px) scale(.7)}to{opacity:1;transform:none}}
+.coin-text{font-family:var(--bod);font-weight:700;font-size:13px;color:#7A5A00}
+
+/* ---- Quick Modes ---- */
+.quick-modes-label{font-family:var(--dis);font-weight:700;font-size:18px;color:#0A2E3A;letter-spacing:-.01em;margin:0 0 14px}
+.quick-modes-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px}
+.mode-card{border-radius:22px;padding:16px 10px 14px;cursor:pointer;border:none;text-align:center;position:relative;overflow:hidden;transition:.25s cubic-bezier(.2,.9,.3,1);display:flex;flex-direction:column;align-items:center;gap:6px}
+.mode-card:hover{transform:translateY(-3px);box-shadow:0 14px 32px rgba(10,46,58,.14)}
+.mode-card:active{transform:scale(.96)}
+.mode-card.meeting{background:linear-gradient(160deg,rgba(111,215,240,.35),rgba(10,158,196,.18));border:1px solid rgba(10,158,196,.28)}
+.mode-card.topics{background:linear-gradient(160deg,rgba(255,159,127,.3),rgba(255,140,105,.14));border:1px solid rgba(255,140,105,.3)}
+.mode-card.debate{background:linear-gradient(160deg,rgba(90,174,90,.28),rgba(61,140,61,.14));border:1px solid rgba(90,174,90,.3)}
+.mode-card-scene{font-size:30px;line-height:1;margin-bottom:2px;filter:drop-shadow(0 2px 4px rgba(10,46,58,.15))}
+.mode-card-label{font-family:var(--dis);font-weight:700;font-size:13px;color:#0A2E3A;letter-spacing:-.01em}
+.mode-card-sub{font-family:var(--bod);font-size:10px;color:#7A939A;font-weight:600}
+.mode-card.done-flag::after{content:"✓";position:absolute;top:8px;right:10px;font-size:10px;font-weight:700;color:#5AAE5A;font-family:var(--bod)}
+
+/* ---- Word of the Day preview ---- */
+.wotd-preview{padding:18px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px;cursor:pointer}
+.wotd-badge{flex:0 0 48px;height:48px;border-radius:16px;background:linear-gradient(135deg,rgba(246,199,106,.45),rgba(238,150,50,.22));border:1px solid rgba(246,199,106,.55);display:grid;place-items:center;font-size:24px}
+.wotd-body{flex:1;min-width:0}
+.wotd-eyebrow{font-family:var(--bod);font-weight:700;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#7A939A;margin-bottom:3px}
+.wotd-word{font-family:var(--dis);font-weight:700;font-size:20px;letter-spacing:-.01em;color:#0A2E3A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wotd-pos{font-family:var(--bod);font-weight:600;font-size:10px;color:#FF8C69;text-transform:uppercase;letter-spacing:.1em;margin-left:6px}
+.wotd-def{font-family:var(--bod);font-size:12.5px;color:#45636B;line-height:1.4;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
+.wotd-arrow{flex:0 0 28px;height:28px;border-radius:50%;background:rgba(10,158,196,.12);display:grid;place-items:center;color:#0A9EC4;font-size:14px;transition:.2s}
+.wotd-preview:hover .wotd-arrow{background:rgba(10,158,196,.22);transform:translateX(2px)}
+
+/* ---- 7-Day Island Challenge ---- */
+.challenge-card{padding:22px 20px;margin-bottom:20px}
+.challenge-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px}
+.challenge-title{font-family:var(--dis);font-weight:700;font-size:17px;color:#0A2E3A;letter-spacing:-.01em;margin:0 0 3px}
+.challenge-sub{font-family:var(--bod);font-size:12px;color:#7A939A}
+.challenge-active-badge{background:linear-gradient(135deg,#5AAE5A,#3D8C3D);color:#fff;font-family:var(--bod);font-weight:700;font-size:10px;padding:4px 10px;border-radius:999px;letter-spacing:.06em;white-space:nowrap}
+.sand-path{position:relative;height:14px;border-radius:99px;background:rgba(238,219,184,.6);border:1px solid rgba(199,163,85,.3);overflow:hidden;margin:8px 0 12px}
+.sand-path-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#5AAE5A,#F6C76A);transition:width .6s cubic-bezier(.2,.9,.3,1);position:relative;overflow:hidden}
+.sand-path-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);animation:shimmer 2.2s linear infinite}
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(200%)}}}
+.challenge-stats{display:flex;gap:8px}
+.chal-stat{flex:1;background:rgba(248,243,232,.75);border:1px solid rgba(238,219,184,.6);border-radius:16px;padding:11px 8px;text-align:center}
+.chal-stat-num{font-family:var(--dis);font-weight:700;font-size:20px;color:#0A2E3A;line-height:1}
+.chal-stat-label{font-family:var(--bod);font-weight:600;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#7A939A;margin-top:3px}
+.chal-stat.earned .chal-stat-num{color:#5AAE5A}
+.chal-stat.net .chal-stat-num{color:#C99A4B}
+
+/* ---- Floating bottom nav ---- */
+.float-nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:50;background:rgba(255,255,255,.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.9);border-radius:999px;padding:10px 16px;box-shadow:0 8px 32px rgba(10,46,58,.16),0 1px 0 rgba(255,255,255,.9) inset;display:flex;gap:4px;align-items:center}
+.float-nav-btn{position:relative;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 14px;border-radius:999px;transition:.22s cubic-bezier(.2,.9,.3,1);color:#7A939A}
+.float-nav-btn:hover{color:#0A2E3A}
+.float-nav-btn[data-on="1"]{background:linear-gradient(135deg,#0A9EC4,#087EA4);color:#fff;box-shadow:0 4px 16px rgba(10,158,196,.35)}
+.float-nav-btn[data-on="1"]:hover{transform:translateY(-1px);box-shadow:0 7px 22px rgba(10,158,196,.42)}
+.float-nav-icon{font-size:19px;line-height:1;transition:.2s}
+.float-nav-label{font-family:var(--bod);font-weight:700;font-size:9px;letter-spacing:.08em;text-transform:uppercase;line-height:1}
+.float-nav-splash{position:absolute;bottom:-4px;left:50%;transform:translateX(-50%);width:8px;height:8px;border-radius:50%;background:#0A9EC4;opacity:0;animation:navSplash .5s ease-out forwards}
+@keyframes navSplash{0%{opacity:.7;transform:translateX(-50%) scale(1)}100%{opacity:0;transform:translateX(-50%) scale(3)}}
+
+/* ---- Accessibility / reduced motion ---- */
+@media (prefers-reduced-motion:reduce){
+  .bs-cloud,.bs-wave-1,.bs-wave-2,.bs-wave-3,.bs-foam-strip,.bs-sun,.bs-palm-left,.bs-palm-right,.cta-wave-icon span,.coconut-tree-wrap svg,.sand-path-fill::after{animation:none!important;transition:none!important}
 }
 `;
 /* ------------------------------- CONTENT --------------------------------- */
@@ -1869,6 +2022,14 @@ function renderMarked(text, fillers) {
   return parts.map((t, i) => <span key={i} className={cls[i]}>{t}</span>);
 }
 
+function storedKey() {
+  try { return window.localStorage.getItem("yap_key") || ""; } catch (e) { return ""; }
+}
+
+function proxyUrl() {
+  try { return window.localStorage.getItem("yap:proxy") || ""; } catch (e) { return ""; }
+}
+
 /* ==========================================================================
    MULTILINGUAL LAYER
    YAP's analysis was built English-first: the word-sanity check, the filler
@@ -2019,14 +2180,10 @@ async function groqTranscribe(blob) {
 /** The evaluating AI — commends, recommends, judges vocab usage, plays the
  *  panel roles, and so on. Same JSON-in, JSON-out contract as
  *  askClaude so every existing call site keeps working unchanged. */
-// Groq's small instruct model: far lower latency than the 70B default, and on
-// the same free tier. Good enough for drafting a brief, not for evaluation.
-const GROQ_FAST_MODEL = "llama-3.1-8b-instant";
-
-async function groqChat(system, user, maxTokens = 900, model) {
+async function groqChat(system, user, maxTokens = 900) {
   const res = await fetch("/api/groq/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system, user, max_tokens: maxTokens, model }),
+    body: JSON.stringify({ system, user, max_tokens: maxTokens }),
   });
   if (!res.ok) throw new Error("groq chat " + res.status);
   const j = await res.json();
@@ -2308,28 +2465,46 @@ function languageDirective(spoken) {
    languages and reads far less like a translation. */
 function preferSarvamWriter() {
   try {
-    if (window.localStorage.getItem("yap:writer") === "groq") return false;
+    if (window.localStorage.getItem("yap:writer") === "claude") return false;
   } catch (e) { /* default below */ }
   const r = replyLangCode();
   return sarvamReady() && r && r !== "en-IN";
 }
 
-/* `fastModel` opts a call into Groq's small, low-latency free model. Use it for
-   generative helpers where speed matters more than nuance (the debate research
-   brief); the evaluators stay on the bigger default model.
-
-   Both backends keep their key server-side, in our own /api routes — there is
-   no browser-held key and no user-configured proxy. Sarvam goes first for
-   non-English replies because it is native to Indian languages; Groq is the
-   default and the fallback. */
-async function askClaude(system, user, maxTokens = 900, spoken, fastModel) {
-  const sys = system + languageDirective(spoken || spokenLangCode());
+async function askClaude(system, user, maxTokens = 900, spoken) {
   if (preferSarvamWriter()) {
     try {
-      return await sarvamChat(sys, user, maxTokens);
-    } catch (e) { /* fall through to Groq rather than losing the feature */ }
+      return await sarvamChat(system + languageDirective(spoken || spokenLangCode()), user, maxTokens);
+    } catch (e) { /* fall through to Claude rather than losing the feature */ }
   }
-  return groqChat(sys, user, maxTokens, fastModel);
+  const proxy = proxyUrl();
+  const key = storedKey();
+  // Groq is the default evaluator: the key lives on the server, so this works
+  // out of the box with nothing to type in. An explicitly configured Claude
+  // proxy/key is a deliberate choice and takes priority over that default.
+  if (!proxy && !key) {
+    try {
+      return await groqChat(system + languageDirective(spoken || spokenLangCode()), user, maxTokens);
+    } catch (e) { /* fall through to Claude rather than losing the feature */ }
+  }
+  const headers = { "Content-Type": "application/json" };
+  // a proxy keeps the key on the server, which is the only safe option once
+  // this is on a real domain; the browser key stays as a local-only fallback
+  if (!proxy && key) {
+    headers["x-api-key"] = key;
+    headers["anthropic-version"] = "2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"] = "true";
+  }
+  const res = await fetch(proxy || "https://api.anthropic.com/v1/messages", {
+    method: "POST", headers,
+    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens,
+      system: system + languageDirective(spoken || spokenLangCode()),
+      messages: [{ role: "user", content: user }] }),
+  });
+  if (!res.ok) throw new Error("api " + res.status);
+  const data = await res.json();
+  const t = data.content.filter((c) => c.type === "text").map((c) => c.text).join("\n").replace(/```json|```/g, "").trim();
+  return JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1));
 }
 
 const EVAL_SYS = `You are the General Evaluator at a Toastmasters-style meeting, reviewing a student's impromptu answer in India. You are reading a speech-to-text transcript: no punctuation, no capitals — never mention either.
@@ -2875,7 +3050,10 @@ function useCountUp(target, ms = 900, go = true) {
   return v;
 }
 
-const turtleImages = {
+
+/* YAP's mascot. Five moods plus the mark and wordmark, embedded so the app
+   stays one file. */
+const YAP_ART = {
   encouraging: "data:image/png;base64,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",
   excited: "data:image/png;base64,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",
   focused: "data:image/png;base64,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",
@@ -2894,53 +3072,22 @@ const YAP_HEAD = {
 
 /* Moods, chosen so the mascot reacts to what actually happened rather than
    being decoration. Every appearance below is tied to a real state. */
-/* YAP mascot is now a turtle! Mapping moods to turtle emotion images. */
+/* YAP has five expressions. Everywhere in the app already asks for a mood by
+   feeling, so this maps those requests onto the five without touching callers. */
 const MOOD_MAP = {
-  happy: "happy", 
-  confident: "confident", 
-  thinking: "thinking",
-  surprised: "surprised", 
-  excited: "excited", 
-  focused: "focused",
-  encouraging: "encouraging", 
-  worried: "worried", 
-  proud: "proud", 
-  tired: "tired",
-  logo: "ready_to_speak_default",
+  happy: "happy", focused: "focused", thinking: "thinking",
+  excited: "excited", encouraging: "encouraging", logo: "logo",
   // legacy names still used across the app
-  wave: "happy", 
-  cool: "confident", 
-  curious: "thinking", 
-  confused: "worried",
-  gloomy: "tired", 
-  panic: "worried", 
-  shocked: "surprised",
-  annoyed: "focused", 
-  teach: "encouraging", 
-  inspect: "focused", 
-  smug: "proud",
+  wave: "happy", cool: "excited", curious: "thinking", confused: "thinking",
+  worried: "thinking", gloomy: "thinking", panic: "thinking", shocked: "excited",
+  annoyed: "focused", teach: "focused", inspect: "focused", smug: "encouraging",
 };
 
 function Mascot({ mood = "happy", size = 72, className, style, alt, head }) {
   const m = MOOD_MAP[mood] || "happy";
-  // Map mood names to actual turtle emotion file numbers
-  const moodToFile = {
-    happy: "01_happy",
-    confident: "02_confident",
-    thinking: "03_thinking",
-    surprised: "04_surprised",
-    excited: "05_excited",
-    focused: "06_focused",
-    encouraging: "07_encouraging",
-    worried: "08_worried",
-    proud: "09_proud",
-    tired: "10_tired",
-    ready_to_speak_default: "11_ready_to_speak_default"
-  };
-  
-  const fileName = moodToFile[m] || "01_happy";
-  const src = `/images/turtle_emotions/${fileName}.png`;
-  
+  // below about 56px the full body loses its face, so swap to the head crop
+  const useHead = head !== undefined ? head : size <= 56;
+  const src = (useHead && YAP_HEAD[m]) || YAP_ART[m] || YAP_HEAD[m] || YAP_ART.happy;
   return (
     <img src={src} width={size} height={size} className={"masc " + (className || "")}
       style={style} alt={alt || ""} aria-hidden={alt ? undefined : "true"} draggable="false" />
@@ -2960,746 +3107,6 @@ function Grass({ level, live }) {
         {level.map((v, i) => <div key={i} className={"blade" + (live ? "" : " idle")} style={{ height: `${Math.max(9, v * 100)}%` }} />)}
       </div>
       <div className="soil" aria-hidden="true" />
-    </>
-  );
-}
-
-const RECORDING_SCREEN_CSS = `
-@keyframes recBarPulse{0%,100%{opacity:.85}50%{opacity:1}}
-@keyframes recDotPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.18);opacity:.7}}
-@keyframes recButtonRing{0%{box-shadow:0 0 0 0 rgba(255,255,255,.55)}100%{box-shadow:0 0 0 22px rgba(255,255,255,0)}}
-.rec-bar{width:5px;border-radius:99px;background:#FBF8F1;min-height:6px;transition:height .09s linear;box-shadow:0 0 6px rgba(255,255,255,.5)}
-.rec-bar.idle{animation:recBarPulse 1.8s ease-in-out infinite}
-.rec-dot{animation:recDotPulse 1.3s ease-in-out infinite}
-.rec-stopbtn{animation:recButtonRing 2.2s ease-out infinite}
-@media (prefers-reduced-motion: reduce){.rec-bar,.rec-dot,.rec-stopbtn{animation:none}}
-`;
-
-const ANALYZING_SCREEN_CSS = `
-@keyframes spinSlow{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
-@keyframes tickIn{0%{opacity:0;transform:scale(0)}100%{opacity:1;transform:scale(1)}}
-.ana-spinner{animation:spinSlow 3s linear infinite}
-.ana-check{animation:tickIn .6s cubic-bezier(.2,.9,.3,1) forwards}
-.ana-circle{width:20px;height:20px;border:2.5px solid #0A9EC4;border-radius:50%;border-right-color:transparent;animation:spinSlow 1s linear infinite}
-@media (prefers-reduced-motion: reduce){.ana-spinner,.ana-circle{animation:none}}
-`;
-
-/* Full-screen "on air" recording view — background photo is the whole UI,
-   controls float on top. Shared by Table Topics and Debate; Vocabulary's
-   inline flip-card recorder is a different, smaller surface. */
-function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stopLabel = "Finish speech" }) {
-  const level = mic?.level || [];
-  const speaking = !!mic?.speaking;
-  // Signal to YapApp that we're in recording mode so it can swap the background
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.__yapRecording = true;
-      return () => { window.__yapRecording = false; };
-    }
-  }, []);
-  return (
-    <div className="relative -mx-6 -mt-1 overflow-hidden rounded-card sm:-mx-6" style={{ minHeight: "calc(100svh - 120px)" }}>
-      <style>{RECORDING_SCREEN_CSS}</style>
-
-      <div className="relative flex h-full flex-col px-6 pb-8 pt-6" style={{ minHeight: "calc(100svh - 120px)" }}>
-        {onBack && (
-          <button
-            onClick={onBack}
-            aria-label="Back"
-            className="grid h-9 w-9 place-items-center rounded-full bg-white/35 text-deep-ocean backdrop-blur-sm transition active:scale-90"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
-        )}
-
-        <div className="mt-2 text-center">
-          <h1 className="m-0 font-[var(--dis)] text-[26px] italic font-semibold text-deep-ocean">{title}</h1>
-          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/45 px-3.5 py-1.5 text-[13px] font-bold text-deep-ocean backdrop-blur-sm">
-            <ClockIcon className="h-3.5 w-3.5" />
-            {fmt(elapsed)}{totalLabel ? <span className="font-medium opacity-70"> of {totalLabel}</span> : null}
-          </div>
-        </div>
-
-        <div className="flex flex-1 flex-col items-center justify-center gap-1">
-          <div className="flex h-14 items-end justify-center gap-[3px]" aria-hidden="true">
-            {(level.length ? level : new Array(22).fill(0)).map((v, i) => (
-              <div
-                key={i}
-                className={`rec-bar ${speaking ? "" : "idle"}`}
-                style={{ height: `${Math.max(10, Math.min(100, v * 100))}%`, animationDelay: speaking ? undefined : `${i * 0.05}s` }}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center gap-5 pb-1">
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-2 text-[17px] font-bold text-white drop-shadow-[0_2px_6px_rgba(8,60,90,.35)]">
-              <span className="rec-dot h-2 w-2 rounded-full bg-coral" />
-              Recording…
-            </div>
-            <p className="m-0 mt-1 text-[13px] text-white/90 drop-shadow-[0_1px_4px_rgba(8,60,90,.3)]">Speak clearly and naturally</p>
-          </div>
-
-          <button
-            onClick={onStop}
-            aria-label={stopLabel}
-            className="rec-stopbtn grid h-20 w-20 place-items-center rounded-full bg-white shadow-[0_14px_30px_rgba(8,60,90,.3)] transition active:scale-90"
-          >
-            <span className="grid h-9 w-9 place-items-center rounded-2xl bg-deep-ocean">
-              <span className="h-3.5 w-3.5 rounded-[3px] bg-white" />
-            </span>
-          </button>
-          <div className="text-[13px] font-bold text-deep-ocean">Tap to stop</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* Loading screen shown while speech is being analyzed after stop is clicked.
-   Shows animated checkmarks ticking one by one as each analysis step completes. */
-function AnalyzingScreen() {
-  const [steps, setSteps] = useState([
-    { label: "Transcribing", done: false, id: 0 },
-    { label: "Analyzing delivery", done: false, id: 1 },
-    { label: "Analyzing content", done: false, id: 2 },
-    { label: "Finalizing results", done: false, id: 3 },
-  ]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.__yapRecording = true;
-      return () => { window.__yapRecording = false; };
-    }
-  }, []);
-
-  useEffect(() => {
-    // Tick off steps one by one with delays
-    const delays = [900, 2100, 3300, 4500];
-    const timers = delays.map((delay, i) =>
-      setTimeout(() => setSteps((prev) => prev.map((s, idx) => idx === i ? { ...s, done: true } : s)), delay)
-    );
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  return (
-    <div className="relative -mx-6 -mt-1 overflow-hidden rounded-card sm:-mx-6" style={{ minHeight: "calc(100svh - 120px)" }}>
-      <style>{ANALYZING_SCREEN_CSS}</style>
-
-      <div className="relative flex h-full flex-col items-center justify-center px-6 pb-8 pt-6" style={{ minHeight: "calc(100svh - 120px)" }}>
-        <div className="mb-8 text-center">
-          <h1 className="m-0 font-[var(--dis)] text-[24px] italic font-semibold text-deep-ocean">Analyzing your speech...</h1>
-          <p className="mt-2 text-[14px] text-deep-ocean/70">This may take a few seconds.</p>
-        </div>
-
-        <div className="mb-12 flex items-center justify-center">
-          <div className="ana-spinner relative h-32 w-32">
-            <svg viewBox="0 0 120 120" className="h-full w-full" aria-hidden="true">
-              <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(10,158,196,.15)" strokeWidth="2" />
-              <circle cx="60" cy="60" r="40" fill="none" stroke="rgba(10,158,196,.2)" strokeWidth="2" />
-              <circle cx="60" cy="60" r="30" fill="none" stroke="rgba(10,158,196,.25)" strokeWidth="2" />
-              <circle cx="60" cy="60" r="15" fill="#F6C76A" />
-            </svg>
-          </div>
-        </div>
-
-        <div className="w-full max-w-sm space-y-2 rounded-2xl border border-white/50 bg-white/70 p-6 shadow-[0_16px_40px_rgba(10,158,196,.1)] backdrop-blur-xl">
-          {steps.map((step, i) => (
-            <div key={step.id} className="flex items-center gap-3">
-              <div className="flex-shrink-0">
-                {step.done ? (
-                  <div className="ana-check h-5 w-5 text-palm-green" style={{ animationDelay: `${0.6 + i * 0.8}s` }}>
-                    <svg viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                ) : (
-                  <div className="ana-circle" />
-                )}
-              </div>
-              <span className={`text-[14px] font-semibold ${step.done ? "text-ink" : "text-ink/60"}`}>{step.label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-8 text-center">
-          <p className="m-0 text-[14px] leading-relaxed text-deep-ocean/80">
-            <span className="block font-semibold">Good things take time.</span>
-            <span className="block">Great speeches take practice.</span>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const DECK_CSS = `
-.deck{ position:relative; }
-.deck-stack{ position:relative; width:100%; animation: deckRise .7s cubic-bezier(.22,1,.36,1) both; }
-.deck-card{ width:100%; will-change:transform; touch-action: pan-y; }
-.deck-card:not(.deck-card-top){ position:absolute; top:0; left:0; right:0; bottom:0; overflow:hidden; border-radius:32px; }
-.deck-card:not(.deck-card-top) > .card{ height:100%; margin-bottom:0; overflow:hidden; }
-.deck-card-top{ position:relative; cursor:grab; }
-.deck-scrim{ position:absolute; inset:0; border-radius:32px; background:rgba(248,242,231,.72); backdrop-filter:blur(1px); pointer-events:none; }
-.deck-card-top:active{ cursor:grabbing; }
-.deck-nav{ display:flex; justify-content:center; align-items:center; gap:14px; margin:14px 0 4px; position:relative; z-index:2; }
-.deck-arrow{ width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:#FFFDF8; color:var(--ink);
-  display:grid; place-items:center; cursor:pointer; box-shadow:0 6px 16px rgba(31,79,91,.12); transition:transform .18s, opacity .18s; }
-.deck-arrow:hover:not(:disabled){ transform:translateY(-2px); }
-.deck-arrow:active:not(:disabled){ transform:scale(.92); }
-.deck-arrow:disabled{ opacity:.32; cursor:default; }
-.deck-arrow:focus-visible{ outline:3px solid var(--ocean); outline-offset:2px; }
-.deck-count{ font-weight:800; font-size:13px; color:var(--ink3); font-variant-numeric:tabular-nums; min-width:52px; text-align:center; }
-.deck-dots{ display:flex; justify-content:center; align-items:center; gap:8px; margin:4px 0 20px; position:relative; z-index:1; }
-.deck-dot{ width:18px; height:18px; object-fit:contain; cursor:pointer; transition:transform .2s; border:none; background:none; padding:0; }
-.deck-dot:hover{ transform:scale(1.15); }
-.deck-dot[data-on="1"]{ transform:scale(1.2); }
-.deck-dot[data-state="current"] img{ filter:drop-shadow(0 0 7px rgba(10,158,196,.85)) saturate(1.4); }
-.deck-dot[data-state="done"] img{ filter:drop-shadow(0 0 3px rgba(246,199,106,.65)); }
-.card.pcard{ background:#FFFDF8; border:1px solid rgba(255,255,255,.5); border-radius:32px;
-  box-shadow:0 24px 50px rgba(31,79,91,.16), inset 0 1px 0 rgba(255,255,255,.7); backdrop-filter:none; -webkit-backdrop-filter:none;
-  overflow:hidden; padding-bottom:34px; }
-/* ocean light spilling over the top edge of the postcard */
-.pcard::before{ content:""; position:absolute; top:0; left:0; right:0; height:76px; pointer-events:none;
-  background:linear-gradient(180deg, rgba(126,200,227,.26), rgba(126,200,227,.06) 60%, rgba(126,200,227,0)); }
-/* a wavy shoreline along the bottom edge of every postcard */
-.pcard::after{ content:""; position:absolute; bottom:0; left:0; right:0; height:26px; pointer-events:none;
-  background-repeat:repeat-x; background-position:bottom center; background-size:200px 26px;
-  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 26' preserveAspectRatio='none'><path d='M0,13 C25,3 50,20 75,13 C100,6 125,20 150,13 C175,6 200,16 200,13 L200,26 L0,26 Z' fill='rgba(126,200,227,0.30)'/><path d='M0,18 C28,10 52,23 78,17 C104,11 128,24 154,17 C180,10 200,20 200,18 L200,26 L0,26 Z' fill='rgba(111,215,240,0.42)'/></svg>"); }
-.deck-intro-caption{ position:absolute; left:50%; top:8px; transform:translateX(-50%); display:flex; align-items:center; gap:8px;
-  background:rgba(255,253,248,.92); border:1px solid rgba(255,255,255,.6); border-radius:999px; padding:6px 14px 6px 6px;
-  box-shadow:0 10px 24px rgba(31,79,91,.14); z-index:20; font-weight:700; font-size:13px; color:var(--ink);
-  animation: introCaptionIn .5s .15s cubic-bezier(.2,1,.35,1) both, introCaptionOut .4s 1.4s ease-in forwards; pointer-events:none; }
-@keyframes introCaptionIn{ from{ opacity:0; transform:translate(-50%,-8px) scale(.9); } to{ opacity:1; transform:translate(-50%,0) scale(1); } }
-@keyframes introCaptionOut{ to{ opacity:0; transform:translate(-50%,-6px) scale(.96); } }
-@keyframes deckRise{ 0%{ opacity:0; transform:translateY(52px) scale(.94); filter:blur(6px); } 100%{ opacity:1; transform:translateY(0) scale(1); filter:blur(0); } }
-@keyframes shellSparklePop{ 0%{ opacity:0; transform:scale(.4) translateY(0) rotate(0deg); } 30%{ opacity:1; transform:scale(1.15) translateY(-8px) rotate(8deg); } 100%{ opacity:0; transform:scale(.75) translateY(-26px) rotate(16deg); } }
-.shell-sparkle{ position:absolute; pointer-events:none; font-size:16px; z-index:15; animation:shellSparklePop .55s ease-out both; }
-@media (prefers-reduced-motion: reduce){
-  .deck-stack{ animation:none; }
-  .deck-intro-caption{ animation:none; }
-  .shell-sparkle{ animation:none; display:none; }
-  .deck-dot[data-state] img{ filter:none; }
-}
-`;
-
-/* Stacked, swipeable card deck. Reveals the next two cards peeking behind
-   the active one; drag/swipe horizontally to advance, tap a shell to jump. */
-function CardDeck({ cards, introCaption, onIndex }) {
-  const [index, setIndex] = useState(0);
-  const [dragX, setDragX] = useState(0);
-  const [sparkles, setSparkles] = useState([]);
-  const draggingRef = useRef(false);
-  const startXRef = useRef(0);
-  const reducedRef = useRef(false);
-
-  useEffect(() => {
-    try { reducedRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { /* default */ }
-  }, []);
-
-  useEffect(() => { setIndex(0); }, [cards.length]);
-
-  const onIndexRef = useRef(onIndex); onIndexRef.current = onIndex;
-  useEffect(() => { if (onIndexRef.current) onIndexRef.current(index); }, [index]);
-
-  const popSparkle = () => {
-    if (reducedRef.current) return;
-    const id = Date.now() + Math.random();
-    setSparkles((s) => [...s, { id, left: 46 + Math.random() * 14, top: 30 + Math.random() * 18 }]);
-    setTimeout(() => setSparkles((s) => s.filter((x) => x.id !== id)), 600);
-  };
-
-  const onPointerDown = (e) => {
-    if (e.target.closest && e.target.closest("button, a, input, textarea, select, audio")) return;
-    draggingRef.current = true;
-    startXRef.current = e.clientX;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* not critical */ }
-  };
-  const onPointerMove = (e) => {
-    if (!draggingRef.current) return;
-    setDragX(e.clientX - startXRef.current);
-  };
-  /* Release always lands back at dragX 0 in the same tick the index moves, so
-     the card can never be left parked offscreen by a dropped pointer event. */
-  const endDrag = (e) => {
-    if (!draggingRef.current) return;
-    draggingRef.current = false;
-    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) { /* not critical */ }
-    const dx = e.clientX - startXRef.current;
-    const THRESH = 70;
-    if (dx <= -THRESH && index < cards.length - 1) {
-      setIndex(index + 1);
-      popSparkle();
-    } else if (dx >= THRESH && index > 0) {
-      setIndex(index - 1);
-      popSparkle();
-    }
-    setDragX(0);
-  };
-
-  if (!cards.length) return null;
-
-  return (
-    <div className="deck">
-      <style>{DECK_CSS}</style>
-      {introCaption && (
-        <div className="deck-intro-caption">
-          <Mascot mood="happy" size={30} />
-          <span>{introCaption}</span>
-        </div>
-      )}
-      <div className="deck-stack">
-        {cards.map((card, i) => {
-          const offset = i - index;
-          if (offset < 0 || offset > 2) return null;
-          const isTop = offset === 0;
-          const drag = isTop ? dragX : 0;
-          const dragging = isTop && draggingRef.current;
-          const translateY = offset === 1 ? 12 : offset === 2 ? 24 : 0;
-          const scale = isTop ? 1 : 1 - offset * 0.04;
-          return (
-            <div
-              key={i}
-              className={"deck-card" + (isTop ? " deck-card-top" : "")}
-              style={{
-                transform: `translate(${drag}px, ${translateY}px) scale(${scale})`,
-                zIndex: 10 - offset,
-                opacity: isTop ? 1 : 1 - offset * 0.1,
-                transition: dragging || reducedRef.current ? "none" : "transform .32s cubic-bezier(.22,1,.36,1), opacity .3s",
-                pointerEvents: isTop ? "auto" : "none",
-              }}
-              onPointerDown={isTop ? onPointerDown : undefined}
-              onPointerMove={isTop ? onPointerMove : undefined}
-              onPointerUp={isTop ? endDrag : undefined}
-              onPointerCancel={isTop ? endDrag : undefined}
-            >
-              {card}
-              {!isTop && <div className="deck-scrim" />}
-              {isTop && sparkles.map((s) => (
-                <span key={s.id} className="shell-sparkle" style={{ left: `${s.left}%`, top: `${s.top}%` }}>✨</span>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-      <div className="deck-nav">
-        <button
-          type="button"
-          className="deck-arrow"
-          onClick={() => setIndex((i) => Math.max(0, i - 1))}
-          disabled={index === 0}
-          aria-label="Previous card"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        </button>
-        <span className="deck-count">{index + 1} / {cards.length}</span>
-        <button
-          type="button"
-          className="deck-arrow"
-          onClick={() => setIndex((i) => Math.min(cards.length - 1, i + 1))}
-          disabled={index === cards.length - 1}
-          aria-label="Next card"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 5l7 7-7 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        </button>
-      </div>
-      <div className="deck-dots" role="tablist" aria-label="Report sections">
-        {cards.map((_, i) => {
-          const state = i < index ? "done" : i === index ? "current" : "future";
-          return (
-            <button
-              key={i}
-              type="button"
-              className="deck-dot"
-              data-on={i === index ? "1" : "0"}
-              data-state={state}
-              role="tab"
-              aria-selected={i === index}
-              aria-label={`Card ${i + 1} of ${cards.length}`}
-              onClick={() => setIndex(i)}
-            >
-              <img
-                src={state === "done" ? "/images/home/shell-done.png" : state === "current" ? "/images/home/shell-today.png" : "/images/home/shell-future.png"}
-                alt=""
-                style={{ width: "100%", height: "100%", objectFit: "contain" }}
-              />
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* Lightweight, always-on beach scene behind the report deck: waves, foam,
-   drifting clouds, a distant island, birds and swaying palms — pure CSS,
-   fixed behind the .wrap content (z-index:0), so it never intercepts taps. */
-const BEACH_CSS = `
-.beach-ambient{ position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
-.ba-sun{ position:absolute; top:6%; right:9%; width:120px; height:120px; border-radius:50%;
-  background:radial-gradient(circle, rgba(246,199,106,.5), rgba(246,199,106,0) 70%); animation:baGlow 6s ease-in-out infinite; }
-/* Pill clouds: a rounded body with two puff blobs, drifting across at
-   different depths. Pure transforms so they stay GPU-cheap. */
-.ba-cloud{ position:absolute; background:rgba(255,255,255,.62); border-radius:999px; filter:blur(.4px);
-  box-shadow:0 6px 18px rgba(31,79,91,.06); }
-.ba-cloud::before, .ba-cloud::after{ content:""; position:absolute; background:inherit; border-radius:50%; }
-.ba-cloud::before{ width:58%; height:170%; left:12%; top:-78%; }
-.ba-cloud::after{ width:42%; height:130%; right:14%; top:-46%; }
-.ba-cloud1{ top:8%;  left:-20%; width:132px; height:30px; opacity:.9;  animation:baFloat 58s linear infinite, baBobble 7s ease-in-out infinite; }
-.ba-cloud2{ top:16%; left:-40%; width:92px;  height:22px; opacity:.65; animation:baFloat 84s linear infinite 6s, baBobble 9s ease-in-out infinite; }
-.ba-cloud3{ top:23%; left:-30%; width:64px;  height:17px; opacity:.45; animation:baFloat 108s linear infinite 18s, baBobble 11s ease-in-out infinite; }
-.ba-island{ position:absolute; bottom:17%; left:72%; width:90px; height:18px; border-radius:50%; background:rgba(90,174,90,.24); }
-.ba-bird{ position:absolute; color:rgba(31,79,91,.32); font-size:11px; animation:baBird 16s linear infinite; }
-.ba-bird1{ top:19%; left:18%; animation-delay:0s; }
-.ba-bird2{ top:25%; left:33%; animation-delay:5s; }
-.ba-wave{ position:absolute; bottom:0; left:0; width:220%; height:70px; color:rgba(10,158,196,.12); }
-.ba-wave1{ animation:baWaveDrift 11s linear infinite alternate; }
-.ba-wave2{ color:rgba(111,215,240,.2); height:46px; animation:baWaveDrift 7.5s linear infinite alternate reverse; }
-.ba-foam{ position:absolute; inset-inline:0; bottom:0; height:14px; background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,.8)); }
-@keyframes baGlow{ 0%,100%{ opacity:.7; } 50%{ opacity:1; } }
-@keyframes baFloat{ 0%{ transform:translateX(0); } 100%{ transform:translateX(180vw); } }
-@keyframes baBobble{ 0%,100%{ margin-top:0; } 50%{ margin-top:6px; } }
-@keyframes baBird{ 0%{ transform:translate(0,0); } 100%{ transform:translate(40vw,-10px); } }
-@keyframes baWaveDrift{ 0%{ transform:translateX(0); } 100%{ transform:translateX(-20%); } }
-@media (prefers-reduced-motion: reduce){
-  .ba-sun,.ba-cloud,.ba-bird,.ba-wave{ animation:none; }
-  .ba-cloud1{ left:8%; } .ba-cloud2{ left:52%; } .ba-cloud3{ left:30%; }
-}
-`;
-
-function BeachAmbient() {
-  return (
-    <div className="beach-ambient" aria-hidden="true">
-      <style>{BEACH_CSS}</style>
-      <div className="ba-sun" />
-      <div className="ba-cloud ba-cloud1" />
-      <div className="ba-cloud ba-cloud2" />
-      <div className="ba-cloud ba-cloud3" />
-      <div className="ba-island" />
-      <span className="ba-bird ba-bird1">〜</span>
-      <span className="ba-bird ba-bird2">〜</span>
-      <svg className="ba-wave ba-wave1" viewBox="0 0 800 80" preserveAspectRatio="none"><path d="M0,40 C100,10 200,60 300,40 C400,20 500,60 600,40 C700,20 800,50 800,40 L800,80 L0,80 Z" fill="currentColor" /></svg>
-      <svg className="ba-wave ba-wave2" viewBox="0 0 800 80" preserveAspectRatio="none"><path d="M0,50 C100,30 200,60 300,45 C400,30 500,65 600,45 C700,25 800,55 800,45 L800,80 L0,80 Z" fill="currentColor" /></svg>
-      <div className="ba-foam" />
-    </div>
-  );
-}
-
-/* The score reveal: one big number in a filling ring, the six measured
-   sub-scores as pills, and a gate into the card deck. Every value comes from
-   the same `r` object the deck cards read — nothing here is recomputed. */
-const REVEAL_CSS = `
-.rv{ position:relative; z-index:1; padding:26px 20px 30px; text-align:center; margin-bottom:24px;
-  background:rgba(255,253,248,.9); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-  border:1px solid rgba(255,255,255,.6); border-radius:32px; box-shadow:0 20px 46px rgba(31,79,91,.14);
-  animation:cardin .5s cubic-bezier(.2,.9,.3,1) both; }
-.rv-ring-wrap{ position:relative; width:224px; height:224px; margin:6px auto 0;
-  animation:rvRise .7s cubic-bezier(.22,1,.36,1) both; }
-.rv-ring{ width:100%; height:100%; transform:rotate(-90deg); }
-.rv-ring .rv-track{ fill:none; stroke:rgba(31,79,91,.09); stroke-width:14; }
-.rv-ring .rv-fill{ fill:none; stroke:url(#rvGrad); stroke-width:14; stroke-linecap:round;
-  transition:stroke-dashoffset 1.5s cubic-bezier(.2,.8,.3,1); filter:drop-shadow(0 3px 10px rgba(10,158,196,.35)); }
-.rv-center{ position:absolute; inset:0; display:grid; place-content:center; gap:0; }
-.rv-num{ font-family:var(--dis); font-weight:800; font-size:66px; line-height:1; letter-spacing:-.03em; color:var(--ink);
-  font-variant-numeric:tabular-nums; }
-.rv-outof{ font-size:12.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--ink3); margin-top:6px; }
-.rv-band{ display:inline-flex; align-items:center; gap:7px; margin-top:14px; padding:7px 16px; border-radius:999px;
-  background:var(--sand); border:1px solid var(--line);
-  font-weight:800; font-size:14px; color:var(--ink); animation:rvPop .5s .9s cubic-bezier(.2,1.3,.35,1) both; }
-.rv-turtle{ margin:14px auto 0; animation:rvPop .6s 1.1s cubic-bezier(.2,1.3,.35,1) both; }
-.rv-line{ font-size:15.5px; line-height:1.6; color:var(--ink2); max-width:38ch; margin:14px auto 0;
-  animation:rvFade .5s 1.25s ease both; }
-.rv-pills{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin:20px auto 0; max-width:400px; }
-.rv-pill{ display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:999px;
-  background:var(--sand); border:1px solid var(--line);
-  font-size:13px; font-weight:700; color:var(--ink2); animation:rvPop .45s cubic-bezier(.2,1.3,.35,1) both; }
-.rv-pill i{ width:8px; height:8px; border-radius:50%; flex:0 0 8px; }
-.rv-pill b{ font-variant-numeric:tabular-nums; color:var(--ink); }
-.rv-cta{ margin-top:26px; animation:rvFade .5s 1.5s ease both; }
-.rv-cta .btn{ font-size:16px; padding:15px 30px; }
-.rv-hint{ font-size:12.5px; color:var(--ink3); margin-top:12px; }
-@keyframes rvRise{ from{ opacity:0; transform:translateY(24px) scale(.9); } }
-@keyframes rvPop{ from{ opacity:0; transform:scale(.75); } }
-@keyframes rvFade{ from{ opacity:0; transform:translateY(8px); } }
-@media (prefers-reduced-motion: reduce){
-  .rv-ring-wrap,.rv-band,.rv-turtle,.rv-line,.rv-pill,.rv-cta{ animation:none; }
-  .rv-ring .rv-fill{ transition:none; }
-}
-`;
-
-/* Verdict wording is chosen from the measured overall score only — it labels
-   the number, it does not invent any new assessment. */
-const bandForScore = (n) =>
-  n >= 82 ? { label: "Excellent", tone: "#7BAE8F" }
-  : n >= 65 ? { label: "Strong", tone: "#5AAE5A" }
-  : n >= 48 ? { label: "Getting there", tone: "#C99A4B" }
-  : n >= 30 ? { label: "Needs work", tone: "#E89A4A" }
-  : { label: "Early days", tone: "#E8674A" };
-
-function ScoreReveal({ r, onOpen, deckCount }) {
-  const [go, setGo] = useState(false);
-  const n = useCountUp(r.overall, 1400, go);
-  useEffect(() => { const t = setTimeout(() => setGo(true), 220); return () => clearTimeout(t); }, []);
-
-  const band = bandForScore(r.overall);
-  const C = 2 * Math.PI * 96;
-  const parts = [
-    ["Structure", r.structure], ["Flow", r.fluency], ["Pace", r.pace],
-    ["Range", r.range], ["Grammar", r.accuracy], ["Clarity", r.clarity100],
-  ];
-
-  return (
-    <div className="rv">
-      <style>{REVEAL_CSS}</style>
-      <div className="rv-ring-wrap">
-        <svg className="rv-ring" viewBox="0 0 224 224">
-          <defs>
-            <linearGradient id="rvGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#7EC8E3" /><stop offset="100%" stopColor={band.tone} />
-            </linearGradient>
-          </defs>
-          <circle className="rv-track" cx="112" cy="112" r="96" />
-          <circle className="rv-fill" cx="112" cy="112" r="96"
-            strokeDasharray={C} strokeDashoffset={go ? C * (1 - r.overall / 100) : C} />
-        </svg>
-        <div className="rv-center">
-          <div className="rv-num">{n}</div>
-          <div className="rv-outof">out of 100</div>
-        </div>
-      </div>
-
-      <div className="rv-band"><i style={{ width: 9, height: 9, borderRadius: "50%", background: band.tone, display: "inline-block" }} />{band.label}</div>
-
-      <div className="rv-turtle"><Mascot mood={r.wc < 8 ? "shocked" : moodForScore(r.overall)} size={96} /></div>
-
-      <p className="rv-line">{r.wpm} words a minute · {r.fillerCount} filler{r.fillerCount === 1 ? "" : "s"} · {r.variety}% word variety</p>
-
-      <div className="rv-pills">
-        {parts.map(([label, v], i) => (
-          <span className="rv-pill" key={label} style={{ animationDelay: `${1.15 + i * 0.07}s` }}>
-            <i style={{ background: bandForScore(v).tone }} />
-            {label} <b>{v}</b>
-          </span>
-        ))}
-      </div>
-
-      <div className="rv-cta">
-        <button className="btn go" onClick={onOpen}>See the full breakdown →</button>
-        <div className="rv-hint">{deckCount} cards from the Timer, Ah-Counter, Grammarian and Evaluator</div>
-      </div>
-    </div>
-  );
-}
-
-/* Small postcard-corner decorations for report cards. Presentation only —
-   none of these read or alter the analysis data. */
-const DECOR_CSS = `
-.decor-corner{ position:absolute; top:14px; right:16px; font-size:20px; pointer-events:none; animation:decorBob 3.4s ease-in-out infinite; z-index:1; }
-@keyframes decorBob{ 0%,100%{ transform:translateY(0) rotate(-3deg); } 50%{ transform:translateY(-4px) rotate(3deg); } }
-.lighthouse{ position:absolute; top:12px; right:16px; width:60px; height:44px; pointer-events:none; z-index:1; }
-.lighthouse .lh-tower{ position:absolute; bottom:0; right:0; width:12px; height:32px; background:linear-gradient(180deg,#fff,#EEDBB8); border-radius:3px 3px 0 0; border:1px solid rgba(31,79,91,.15); }
-.lighthouse .lh-cap{ position:absolute; top:0; right:0; width:12px; height:7px; background:#E8674A; border-radius:2px 2px 6px 6px; }
-.lighthouse .lh-beam{ position:absolute; top:5px; right:11px; width:52px; height:3px; background:linear-gradient(90deg,rgba(246,199,106,.85),transparent); transform-origin:right center; animation:beamSweep 3.2s ease-in-out infinite; }
-@keyframes beamSweep{ 0%,100%{ transform:rotate(18deg); } 50%{ transform:rotate(-18deg); } }
-.pearl-wrap{ position:relative; display:flex; align-items:center; gap:10px; margin-bottom:14px; }
-.pearl-wrap img{ width:40px; height:40px; object-fit:contain; animation:pearlOpen .6s cubic-bezier(.2,1.2,.35,1) both; }
-@keyframes pearlOpen{ 0%{ opacity:0; transform:scale(.5) rotate(-14deg); } 100%{ opacity:1; transform:scale(1) rotate(0deg); } }
-.speech-row{ display:flex; align-items:flex-start; gap:10px; margin-bottom:12px; }
-.speech-bubble{ position:relative; background:var(--sand); border:1px solid var(--line); border-radius:16px; padding:10px 14px; font-weight:700; font-size:13px; color:var(--ink2); }
-.speech-bubble::before{ content:""; position:absolute; left:-6px; top:14px; width:12px; height:12px; background:var(--sand); border-left:1px solid var(--line); border-bottom:1px solid var(--line); transform:rotate(45deg); }
-.run-turtle-row{ display:flex; align-items:center; gap:8px; }
-.run-turtle{ animation:runBounce 1s ease-in-out infinite; }
-@keyframes runBounce{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-3px); } }
-.rhythm-wave{ flex:1; height:18px; }
-.rhythm-wave path{ animation:rhythmDash 1.4s linear infinite; }
-@keyframes rhythmDash{ 0%{ stroke-dashoffset:0; } 100%{ stroke-dashoffset:-24; } }
-.thumbs-badge{ display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:800; color:var(--good); margin-left:8px; }
-.celebrate-check{ width:56px; height:56px; border-radius:50%; background:var(--good); display:grid; place-items:center; margin:4px auto 12px;
-  animation:mascpop .5s .1s cubic-bezier(.2,1,.35,1) both; box-shadow:0 12px 26px rgba(123,174,143,.4); }
-.celebrate-splash{ position:absolute; bottom:-6px; left:50%; transform:translateX(-50%); width:120px; height:14px;
-  background:radial-gradient(ellipse, rgba(126,200,227,.4), transparent 70%); animation:splashPulse 1.6s ease-in-out infinite; pointer-events:none; }
-@keyframes splashPulse{ 0%,100%{ opacity:.5; transform:translateX(-50%) scaleX(1); } 50%{ opacity:.9; transform:translateX(-50%) scaleX(1.15); } }
-.celebrate-coconut{ position:absolute; top:-10px; right:24px; font-size:22px; animation:coconutDrop 1.8s ease-in infinite; pointer-events:none; }
-@keyframes coconutDrop{ 0%{ transform:translateY(-14px); opacity:0; } 15%{ opacity:1; } 60%{ transform:translateY(6px); } 70%{ transform:translateY(0); } 100%{ opacity:1; transform:translateY(0); } }
-.overall-celebrate{ display:flex; justify-content:center; margin-top:6px; animation:mascpop .6s 1.2s cubic-bezier(.2,1,.35,1) both; opacity:0; animation-fill-mode:forwards; }
-
-/* ---- the closing summary card ---- */
-.sum{ text-align:center; position:relative; }
-.sum-sun{ position:absolute; top:-70px; left:50%; transform:translateX(-50%); width:210px; height:210px; border-radius:50%;
-  background:radial-gradient(circle, rgba(246,199,106,.34), rgba(246,199,106,0) 68%); pointer-events:none; animation:sumSun 5s ease-in-out infinite; }
-@keyframes sumSun{ 0%,100%{ opacity:.65; transform:translateX(-50%) scale(1); } 50%{ opacity:1; transform:translateX(-50%) scale(1.06); } }
-.sum-score{ font-family:var(--dis); font-weight:800; font-size:60px; line-height:1; letter-spacing:-.03em; color:var(--ink);
-  font-variant-numeric:tabular-nums; animation:thump .6s .25s cubic-bezier(.2,1,.4,1) both; }
-.sum-outof{ font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--ink3); margin-top:4px; }
-.sum-title{ font-family:var(--dis); font-weight:700; font-size:23px; color:var(--ink); margin:14px 0 4px; }
-.sum-sub{ font-size:14.5px; line-height:1.6; color:var(--ink2); max-width:34ch; margin:0 auto; }
-.sum-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:18px 0 4px; }
-.sum-stat{ background:var(--sand); border:1px solid var(--line); border-radius:18px; padding:11px 6px; }
-.sum-stat b{ display:block; font-family:var(--dis); font-weight:800; font-size:21px; color:var(--ink); font-variant-numeric:tabular-nums; }
-.sum-stat span{ font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink3); }
-.sum-shells{ display:flex; justify-content:center; gap:10px; margin-top:14px; font-size:17px; }
-.sum-shells span{ animation:decorBob 3s ease-in-out infinite; }
-.sum-shells span:nth-child(2){ animation-delay:.4s; } .sum-shells span:nth-child(3){ animation-delay:.8s; }
-.sum-actions{ display:grid; gap:9px; margin-top:20px; }
-.sum-actions .row2{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
-.sum-actions .btn{ width:100%; }
-.sum-toast{ margin-top:12px; font-size:13px; font-weight:700; color:var(--good); animation:rvFade .3s ease both; }
-@media (prefers-reduced-motion: reduce){
-  .decor-corner,.lighthouse .lh-beam,.pearl-wrap img,.run-turtle,.rhythm-wave path,.celebrate-check,.celebrate-splash,.celebrate-coconut,.overall-celebrate,
-  .sum-sun,.sum-score,.sum-shells span{ animation:none; opacity:1; }
-}
-`;
-function SailDecor() {
-  return (<><style>{DECOR_CSS}</style><span className="decor-corner" role="img" aria-label="">⛵</span></>);
-}
-
-/* One emoji pinned to the card's top-right, gently bobbing. Decorative only. */
-function CornerDecor({ emoji }) {
-  return (<><style>{DECOR_CSS}</style><span className="decor-corner" role="img" aria-label="">{emoji}</span></>);
-}
-
-function LighthouseDecor() {
-  return (
-    <>
-      <style>{DECOR_CSS}</style>
-      <div className="lighthouse" aria-hidden="true">
-        <div className="lh-beam" />
-        <div className="lh-cap" />
-        <div className="lh-tower" />
-      </div>
-    </>
-  );
-}
-
-function PearlOpenHeader({ label }) {
-  return (
-    <>
-      <style>{DECOR_CSS}</style>
-      <div className="pearl-wrap">
-        <ShellPearlArt />
-        <div className="eye" style={{ margin: 0 }}>{label}</div>
-      </div>
-    </>
-  );
-}
-
-function SpeechBubbleHeader({ label, sub }) {
-  return (
-    <>
-      <style>{DECOR_CSS}</style>
-      <div className="speech-row">
-        <Mascot mood="encouraging" size={40} />
-        <div className="speech-bubble">{label}{sub ? <div style={{ fontWeight: 500, marginTop: 4, color: "var(--ink3)" }}>{sub}</div> : null}</div>
-      </div>
-    </>
-  );
-}
-
-function RunTurtleBadge() {
-  return (
-    <>
-      <style>{DECOR_CSS}</style>
-      <div className="run-turtle-row">
-        <span className="run-turtle"><Mascot mood="excited" size={30} /></span>
-        <svg className="rhythm-wave" viewBox="0 0 120 18" preserveAspectRatio="none">
-          <path d="M0,9 Q10,0 20,9 T40,9 T60,9 T80,9 T100,9 T120,9" fill="none" stroke="var(--ocean)" strokeWidth="2" strokeDasharray="4 4" />
-        </svg>
-      </div>
-    </>
-  );
-}
-
-function ThumbsBadge({ ok }) {
-  if (!ok) return null;
-  return (<><style>{DECOR_CSS}</style><span className="thumbs-badge">👍 low fillers</span></>);
-}
-
-/* The closing card. Recaps the same measured numbers shown elsewhere and
-   offers the four ways out: save, share, new topic, home. */
-function SummaryCard({ r, topic, onNewTopic, onHome }) {
-  const [toast, setToast] = useState("");
-  const band = bandForScore(r.overall);
-  const say = (m) => { setToast(m); setTimeout(() => setToast(""), 2600); };
-
-  const summaryText =
-    `I scored ${r.overall}/100 on Yap${topic ? ` — "${topic}"` : ""}.\n` +
-    `Structure ${r.structure} · Flow ${r.fluency} · Pace ${r.pace} · ` +
-    `Range ${r.range} · Grammar ${r.accuracy} · Clarity ${r.clarity100}\n` +
-    `${r.wpm} wpm · ${r.fillerCount} filler${r.fillerCount === 1 ? "" : "s"} · ${r.variety}% word variety`;
-
-  const save = () => {
-    const saved = readStore("savedResults", []);
-    saved.unshift({
-      at: Date.now(), topic: topic || "", overall: r.overall, wpm: r.wpm,
-      fillerCount: r.fillerCount, variety: r.variety, seconds: r.seconds,
-      structure: r.structure, fluency: r.fluency, pace: r.pace,
-      range: r.range, accuracy: r.accuracy, clarity100: r.clarity100,
-    });
-    writeStore("savedResults", saved.slice(0, 50));
-    say("Saved to this device ✓");
-  };
-
-  const share = async () => {
-    try {
-      if (navigator.share) { await navigator.share({ title: "My Yap score", text: summaryText }); return; }
-      await navigator.clipboard.writeText(summaryText);
-      say("Copied — paste it anywhere ✓");
-    } catch (e) {
-      if (e && e.name === "AbortError") return; // user dismissed the sheet
-      say("Couldn't share — try copying instead");
-    }
-  };
-
-  return (
-    <div className="card pcard sum">
-      <style>{DECOR_CSS}</style>
-      <div className="sum-sun" />
-      <span className="celebrate-coconut" role="img" aria-label="">🥥</span>
-
-      <div style={{ position: "relative" }}>
-        <div className="celebrate-check">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-        </div>
-        <div className="celebrate-splash" />
-      </div>
-
-      <div className="sum-score">{r.overall}</div>
-      <div className="sum-outof">out of 100 · {band.label}</div>
-
-      <div className="sum-title">That's a wrap</div>
-      <p className="sum-sub">
-        {r.seconds ? `${fmt(r.seconds)} on the clock` : "Speech complete"}
-        {topic ? ` · “${topic}”` : ""}
-      </p>
-
-      <div className="sum-grid">
-        <div className="sum-stat"><b>{r.wpm}</b><span>wpm</span></div>
-        <div className="sum-stat"><b>{r.fillerCount}</b><span>fillers</span></div>
-        <div className="sum-stat"><b>{r.variety}%</b><span>variety</span></div>
-      </div>
-
-      <div className="sum-shells"><span>🐚</span><span>⭐</span><span>🐚</span></div>
-
-      <div className="sum-actions">
-        <button className="btn go" onClick={onNewTopic}>Try a new topic</button>
-        <div className="row2">
-          <button className="btn gold" onClick={save}>Save result</button>
-          <button className="btn leaf" onClick={share}>Share</button>
-        </div>
-        <button className="btn" onClick={onHome}>Back home</button>
-      </div>
-
-      {toast && <div className="sum-toast" role="status">{toast}</div>}
-    </div>
-  );
-}
-
-function OverallCelebrate() {
-  return (
-    <>
-      <style>{DECOR_CSS}</style>
-      <div className="overall-celebrate"><Mascot mood="excited" size={44} /></div>
     </>
   );
 }
@@ -3996,12 +3403,11 @@ function ScoreDial({ label, value, delay = 0 }) {
   );
 }
 
-function ClarityCard({ r }) {
+function ClarityCard({ r, aiRewrites }) {
   const c = r.concise;
   if (r.wc < 12) return null;
   return (
-    <div className="card sky pcard">
-      <LighthouseDecor />
+    <div className="card sky">
       <div className="role">
         <div className="rbadge"><Mascot mood="smug" size={46} /></div>
         <div><div className="rname">Conciseness</div><div className="rrole">says it in fewer words</div></div>
@@ -4044,6 +3450,19 @@ function ClarityCard({ r }) {
         </>
       )}
 
+      {c.tangled.length > 0 && (
+        <>
+          <div className="eye" style={{ margin: "16px 0 8px" }}>Hard to follow</div>
+          {c.tangled.slice(0, 3).map((u, i) => (
+            <div className="fixrow" key={i}>
+              <span className="badge g">Unclear</span>
+              <p style={{ marginTop: 0 }}>“{u.text}”</p>
+              <p>{u.why}</p>
+            </div>
+          ))}
+        </>
+      )}
+
       {c.repeatedIdeas.length > 0 && (
         <>
           <div className="eye" style={{ margin: "16px 0 8px" }}>Ideas that came round again</div>
@@ -4054,6 +3473,33 @@ function ClarityCard({ r }) {
         </>
       )}
 
+      {(c.rewrites.length > 0 || (aiRewrites && aiRewrites.length > 0)) && (
+        <>
+          <div className="eye" style={{ margin: "18px 0 8px" }}>Sharper versions</div>
+          <p className="ex" style={{ marginBottom: 10 }}>
+            Only your own words are cut or swapped — nothing is added, so this still sounds like you.
+          </p>
+          {c.rewrites.map((rw, i) => (
+            <div className="rw" key={i}>
+              <span className="lbl">What you said · {rw.reason}</span>
+              <span className="orig">“{rw.original}”</span>
+              <span className="lbl" style={{ marginTop: 10 }}>Sharper</span>
+              <span className="tight">“{rw.tightened}”</span>
+              {rw.removed.length > 0 && <div className="cutlist">{rw.removed.slice(0, 5).join(" · ")}</div>}
+              <span className="save">{rw.before} → {rw.after} words</span>
+            </div>
+          ))}
+          {(aiRewrites || []).map((rw, i) => (
+            <div className="rw" key={"ai" + i}>
+              <span className="lbl">What you said</span>
+              <span className="orig">“{rw.was}”</span>
+              <span className="lbl" style={{ marginTop: 10 }}>Sharper — same voice</span>
+              <span className="tight">“{rw.now}”</span>
+              {rw.why && <div className="cutlist">{rw.why}</div>}
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }
@@ -4234,15 +3680,6 @@ function localBrief(topic, stance) {
   };
 }
 
-/* The model returns each counter as one string holding both the objection and
-   its answer. Split on the first sentence boundary so the rebuttal can be shown
-   under its own heading; if there is only one sentence, it stays whole. */
-function splitCounter(text) {
-  const t = String(text || "").trim();
-  const m = t.match(/^(.+?[.?!])\s+(.+)$/s);
-  return m ? [m[1], m[2]] : [t];
-}
-
 const BRIEF_SYS = `You prepare a debate brief for an Indian college student who has two minutes to get ready. Be concrete and honest — never invent statistics, and never cite a study you are not confident exists.
 Return ONLY raw JSON:
 {"summary":"what this debate is really about, 1-2 sentences, framed for their chosen side",
@@ -4303,41 +3740,6 @@ const DEBATE_CSS = `
   resize:vertical;margin-top:8px}
 .framebody textarea:focus{outline:none;border-color:var(--ocean);box-shadow:0 0 0 3px rgba(126,200,227,.16)}
 .brief li{font-size:14.5px;line-height:1.6;margin-bottom:7px;color:var(--ink2)}
-
-/* ---- research brief ---- */
-/* one solid white sheet: the brief is read at a glance under time pressure,
-   so it needs a flat opaque ground, not the translucent glass used elsewhere */
-.bsheet{background:#fff;border:1px solid var(--line);border-radius:26px;padding:24px 22px;margin-bottom:20px;box-shadow:0 18px 44px rgba(31,79,91,.12);animation:cardin .5s cubic-bezier(.2,.9,.3,1) both}
-.bsheet .bsec:last-child{margin-bottom:0}
-@media (max-width:560px){.bsheet{padding:20px 16px;border-radius:22px}}
-.bsec{margin-bottom:18px}
-.bhead{display:flex;align-items:center;gap:9px;margin-bottom:11px}
-.bhead .bico{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;font-size:14px;flex:none;background:var(--bh-bg,var(--foam));box-shadow:0 2px 6px rgba(31,79,91,.10)}
-.bhead .btit{font-family:var(--bod);font-weight:800;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)}
-.bhead .bcount{margin-left:auto;font-size:11px;font-weight:700;color:var(--ink3);font-variant-numeric:tabular-nums}
-
-/* the thesis — the one thing they must internalise, so it leads and is biggest */
-.bthesis{background:linear-gradient(140deg,rgba(126,200,227,.20),rgba(214,240,246,.42));border:1px solid rgba(126,200,227,.5);border-radius:24px;padding:20px 22px;margin-bottom:18px;box-shadow:0 12px 30px rgba(126,200,227,.16)}
-.bthesis p{font-size:17px;line-height:1.55;margin:0;font-weight:600;color:var(--ink)}
-
-/* numbered argument cards — countable at a glance while speaking */
-.bpoint{display:flex;gap:12px;align-items:flex-start;background:rgba(126,200,227,.07);border:1px solid var(--line);border-left:3px solid var(--ocean);border-radius:14px;padding:13px 15px;margin-bottom:8px;transition:transform .22s cubic-bezier(.2,.9,.3,1),box-shadow .22s}
-.bpoint:hover{transform:translateX(3px);box-shadow:0 6px 18px rgba(31,79,91,.10)}
-.bpoint .bn{flex:none;width:21px;height:21px;border-radius:50%;background:var(--ocean);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;margin-top:1px}
-.bpoint p{margin:0;font-size:15px;line-height:1.55;color:var(--ink)}
-
-/* objection → answer, visually separated so the rebuttal is findable */
-.bcounter{background:rgba(255,159,127,.07);border:1px solid rgba(255,159,127,.42);border-radius:14px;padding:13px 15px;margin-bottom:8px}
-.bcounter .bq{display:flex;gap:8px;font-size:14.5px;line-height:1.5;font-weight:600;color:var(--coral-deep);margin:0}
-.bcounter .bq::before{content:"\\201C";font-family:var(--dis);font-size:26px;line-height:.8;opacity:.55;flex:none}
-.bcounter .ba{margin:9px 0 0;padding-top:9px;border-top:1px dashed rgba(255,159,127,.42);font-size:14.5px;line-height:1.55;color:var(--ink2)}
-.bcounter .ba b{font-weight:800;font-size:10px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:3px;color:var(--ink3)}
-
-.bfact{display:flex;gap:10px;background:rgba(238,219,184,.26);border:1px solid rgba(238,219,184,.85);border-radius:14px;padding:12px 15px;margin-bottom:8px;font-size:14.5px;line-height:1.55;color:var(--ink2)}
-.bfact::before{content:"\\1F4CA";flex:none;font-size:14px;line-height:1.5}
-.bwarn{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.5;color:var(--ink3);margin:10px 2px 0}
-
-.bcase{background:rgba(123,174,143,.08);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:14px;padding:13px 15px;margin-bottom:8px;font-size:14.5px;line-height:1.55;color:var(--ink2)}
 .brief ul{margin:6px 0 0;padding-left:18px}
 .pill{display:inline-block;font-family:var(--bod);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
   border:1px solid var(--line);border-radius:999px;padding:4px 11px;margin-bottom:8px;color:var(--ink2)}
@@ -4366,8 +3768,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
   const [stance, setStance] = useState(null);
   const [brief, setBrief] = useState(null);
   const [briefState, setBriefState] = useState("idle");
-  const [briefLeft, setBriefLeft] = useState(0);   // seconds remaining on the reveal timer
-  const briefTimers = useRef([]);
   const [prepChoice, setPrepChoice] = useState(60);
   const [customPrep, setCustomPrep] = useState(90);
   const [notes, setNotes] = useState(["", "", "", ""]);
@@ -4399,7 +3799,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     const r = analyseDebate(text, secs, m, stance);
     const tRep = timerReport(secs, slot);
     setRep({ r, tRep, aRep: ahReport(r), gRep: gramReport(r, null, false), slot });
-    setStage("analyzing");
+    setStage("report");
     setPetals(true); setTimeout(() => setPetals(false), 3200);
     onFinish({ xp: 45 + Math.round(r.debateScore / 2), seconds: secs, kind: "topic" });
 
@@ -4418,57 +3818,12 @@ function DebateMode({ mic, onFinish, lib, profile }) {
 
   const watch = useStopwatch(slot.red + 30, finish);
 
-  useEffect(() => {
-    if (stage === "analyzing") {
-      const timer = setTimeout(() => {
-        setStage("report");
-      }, 5200);
-      return () => clearTimeout(timer);
-    }
-  }, [stage]);
-
-  /* The brief streams: tokens are shown as they arrive so the wait has
-     something to watch, while the finished, formatted brief is still held
-     until a 10s floor has passed. Whichever finishes last — stream or
-     timer — triggers the reveal. */
-  /* The brief is fetched immediately, but held back until a 20s floor has
-     passed: the wait is deliberate prep time, not latency. Whichever finishes
-     last — the request or the timer — triggers the reveal. */
-  const BRIEF_REVEAL_MS = 20000;
   const getBrief = () => {
     setBriefState("loading");
-    setBriefLeft(Math.ceil(BRIEF_REVEAL_MS / 1000));
-
-    let pending = null;                       // result waiting on the timer
-    let elapsed = false;                      // timer done, waiting on result
-
-    const reveal = ({ data, local }) => {
-      setBrief(data);
-      setBriefState(local ? "local" : "done");
-      setBriefLeft(0);
-    };
-
-    const tick = setInterval(() => setBriefLeft((n) => (n > 1 ? n - 1 : 0)), 1000);
-    const floor = setTimeout(() => {
-      elapsed = true;
-      clearInterval(tick);
-      setBriefLeft(0);
-      if (pending) reveal(pending);
-    }, BRIEF_REVEAL_MS);
-    briefTimers.current = [tick, floor];
-
-    const settle = (payload) => {
-      if (elapsed) reveal(payload);           // timer already done — show now
-      else pending = payload;                 // hold until the floor passes
-    };
-
-    askClaude(BRIEF_SYS, `Motion: "${topic}"\nThey are arguing: ${stanceById(stance).label} (${stanceById(stance).verb} the motion).`, 1100, undefined, GROQ_FAST_MODEL)
-      .then((j) => settle({ data: { ...j, stance }, local: false }))
-      .catch(() => settle({ data: localBrief(topic, stance), local: true }));
+    askClaude(BRIEF_SYS, `Motion: "${topic}"\nThey are arguing: ${stanceById(stance).label} (${stanceById(stance).verb} the motion).`, 1100)
+      .then((j) => { setBrief({ ...j, stance }); setBriefState("done"); })
+      .catch(() => { setBrief(localBrief(topic, stance)); setBriefState("local"); });
   };
-
-  // never leave an interval running behind an unmounted or reset flow
-  useEffect(() => () => briefTimers.current.forEach((t) => { clearInterval(t); clearTimeout(t); }), []);
 
   const startSpeaking = async () => {
     setTyped("");
@@ -4482,9 +3837,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
   };
 
   const reset = () => {
-    briefTimers.current.forEach((t) => { clearInterval(t); clearTimeout(t); });
-    briefTimers.current = [];
-    setStage("stance"); setStance(null); setBrief(null); setBriefState("idle"); setBriefLeft(0);
+    setStage("stance"); setStance(null); setBrief(null); setBriefState("idle");
     setNotes(["", "", "", ""]); setRep(null); setAi(null); setAiState("idle");
     prep.reset(); watch.reset();
   };
@@ -4514,7 +3867,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
           know what you'll say, and you're scored on whether the case survives your own speech.
         </p>
         <Notice mic={mic} />
-        <LanguageBar mic={mic} />
 
         <div className="card sky">
           <div className="eye">The motion</div>
@@ -4574,13 +3926,10 @@ function DebateMode({ mic, onFinish, lib, profile }) {
             </p>
             <div className="row">
               <button className="btn go" onClick={getBrief} disabled={briefState === "loading"}>
-                {briefState === "loading"
-                  ? <><span className="spin" />Researching{briefLeft > 0 ? ` · ${briefLeft}s` : "…"}</>
-                  : "Get a research brief"}
+                {briefState === "loading" ? <><span className="spin" />Researching…</> : "Get a research brief"}
               </button>
               <button className="btn" onClick={() => setStage("prep")}>Skip — go in cold</button>
             </div>
-
           </div>
         )}
 
@@ -4592,80 +3941,38 @@ function DebateMode({ mic, onFinish, lib, profile }) {
                 researched material. Everything else in this mode works exactly the same.
               </div>
             )}
-            <div className="bsheet">
-            <div className="bthesis">
-              <div className="bhead" style={{ marginBottom: 8 }}>
-                <span className="bico" style={{ background: "rgba(126,200,227,.45)" }}>🎯</span>
-                <span className="btit">What this is really about</span>
-              </div>
-              <p>{brief.summary}</p>
+            <div className="card moss">
+              <div className="eye">What this is really about</div>
+              <p style={{ fontSize: 15.5, lineHeight: 1.65 }}>{brief.summary}</p>
             </div>
 
             {(brief.points || []).length > 0 && (
-              <div className="bsec">
-                <div className="bhead">
-                  <span className="bico" style={{ background: "rgba(126,200,227,.38)" }}>🗣️</span>
-                  <span className="btit">Your arguments</span>
-                  <span className="bcount">{brief.points.length}</span>
-                </div>
-                {brief.points.map((x, i) => (
-                  <div className="bpoint" key={i}>
-                    <span className="bn">{i + 1}</span>
-                    <p>{x}</p>
-                  </div>
-                ))}
+              <div className="card">
+                <div className="eye">Your arguments</div>
+                <ul className="brief">{brief.points.map((x, i) => <li key={i}>{x}</li>)}</ul>
               </div>
             )}
-
             {(brief.counters || []).length > 0 && (
-              <div className="bsec">
-                <div className="bhead">
-                  <span className="bico" style={{ background: "rgba(255,159,127,.38)" }}>⚔️</span>
-                  <span className="btit">What they'll come back with</span>
-                  <span className="bcount">{brief.counters.length}</span>
-                </div>
-                {brief.counters.map((x, i) => {
-                  const [objection, ...rest] = splitCounter(x);
-                  return (
-                    <div className="bcounter" key={i}>
-                      <p className="bq">{objection}</p>
-                      {rest.length > 0 && (
-                        <p className="ba"><b>Your answer</b>{rest.join(" ")}</p>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="card coral">
+                <div className="eye">What they'll come back with</div>
+                <ul className="brief">{brief.counters.map((x, i) => <li key={i}>{x}</li>)}</ul>
               </div>
             )}
-
             {(brief.facts || []).length > 0 && (
-              <div className="bsec">
-                <div className="bhead">
-                  <span className="bico" style={{ background: "rgba(238,219,184,.7)" }}>📎</span>
-                  <span className="btit">Worth citing</span>
-                  <span className="bcount">{brief.facts.length}</span>
-                </div>
-                {brief.facts.map((x, i) => <div className="bfact" key={i}><span>{x}</span></div>)}
-                <p className="bwarn">
-                  <span>⚠️</span>
-                  <span>Check anything you plan to say as fact. A confident wrong number is worse than no number.</span>
+              <div className="card sun">
+                <div className="eye">Worth citing</div>
+                <ul className="brief">{brief.facts.map((x, i) => <li key={i}>{x}</li>)}</ul>
+                <p className="ex" style={{ marginTop: 8 }}>
+                  Check anything you plan to say as fact. A confident wrong number is worse than no number.
                 </p>
               </div>
             )}
-
             {(brief.examples || []).length > 0 && (
-              <div className="bsec">
-                <div className="bhead">
-                  <span className="bico" style={{ background: "rgba(123,174,143,.32)" }}>💡</span>
-                  <span className="btit">Cases you could use</span>
-                  <span className="bcount">{brief.examples.length}</span>
-                </div>
-                {brief.examples.map((x, i) => <div className="bcase" key={i}>{x}</div>)}
+              <div className="card">
+                <div className="eye">Cases you could use</div>
+                <ul className="brief">{brief.examples.map((x, i) => <li key={i}>{x}</li>)}</ul>
               </div>
             )}
-
-            </div>
-
             <div className="row">
               <button className="btn go" onClick={() => setStage("prep")}>
                 <span>Start prep <Icon name="arrow" size={18} /></span>
@@ -4798,13 +4105,11 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     const live = stage === "live";
     return (
       <div>
-        {!live && <FlowRail at="speak" />}
-        {!live && (
-          <div className="card" style={{ borderColor: st.colour }}>
-            <span className="pill" style={{ color: st.colour, borderColor: st.colour }}>Arguing {st.label}</span>
-            <div className="topic" style={{ minHeight: "auto", fontSize: 20 }}>{topic}</div>
-          </div>
-        )}
+        <FlowRail at="speak" />
+        <div className="card" style={{ borderColor: st.colour }}>
+          <span className="pill" style={{ color: st.colour, borderColor: st.colour }}>Arguing {st.label}</span>
+          <div className="topic" style={{ minHeight: "auto", fontSize: 20 }}>{topic}</div>
+        </div>
 
         {notes.some((n) => n.trim()) && !live && (
           <div className="card">
@@ -4834,22 +4139,27 @@ function DebateMode({ mic, onFinish, lib, profile }) {
             </div>
           </div>
         ) : (
-          <RecordingScreen
-            title="Debate"
-            elapsed={watch.t}
-            totalLabel={slot.label}
-            mic={mic}
-            onStop={() => finish()}
-            onBack={() => { mic.stop(); watch.stop(); watch.reset(); setStage("speak"); }}
-            stopLabel="Finish"
-          />
+          <div className="card coral">
+            <div className="tag">on the clock</div>
+            <div className={"clock" + (watch.t > slot.red ? " over" : "")}>
+              {fmt(watch.t)} <small>of {slot.label}</small>
+            </div>
+            <div className="vine">
+              <i className={watch.t >= slot.red ? "r" : watch.t >= slot.amber ? "a" : ""}
+                style={{ width: `${Math.min(100, (watch.t / slot.red) * 100)}%` }} />
+            </div>
+            <Signal elapsed={watch.t} slot={slot} />
+            <Grass level={mic.level} live={mic.speaking} />
+            <div className="script" style={{ marginTop: 10 }}>
+              {mic.finalText}<span className="interim">{mic.interim}</span>
+            </div>
+            <div className="row" style={{ marginTop: 14 }}>
+              <button className="btn leaf" onClick={() => finish()}>Finish</button>
+            </div>
+          </div>
         )}
       </div>
     );
-  }
-
-  if (stage === "analyzing") {
-    return <AnalyzingScreen />;
   }
 
   /* ============================ 5 · REPORT ============================ */
@@ -5005,7 +4315,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
 
 /* ============================== TABLE TOPICS ============================== */
 
-function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, clearPreselected }) {
+function TableTopics({ mic, onFinish, wotd, lib, profile }) {
   const allTopics = useMemo(() => {
     const merged = { ...TOPICS };
     (lib.topics || []).forEach((t) => {
@@ -5016,7 +4326,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
   const cats = Object.keys(allTopics);
   const [cat, setCat] = useState(["Table Topics", "Placement & GD"]);
   const [slotId, setSlotId] = useState(60);
-  const [topic, setTopic] = useState(preselectedTopic);
+  const [topic, setTopic] = useState(null);
   const [spinning, setSpinning] = useState(false);
   const [phase, setPhase] = useState("pick");
   const [mode, setMode] = useState("mic");
@@ -5025,15 +4335,6 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
   const [ai, setAi] = useState(null);
   const [aiState, setAiState] = useState("idle");
   const [petals, setPetals] = useState(false);
-  // the report opens on the score reveal; the deck is behind an explicit tap
-  const [deepOpen, setDeepOpen] = useState(false);
-
-  // Clear the preselected topic after it's been used
-  useEffect(() => {
-    if (preselectedTopic) {
-      clearPreselected();
-    }
-  }, [preselectedTopic, clearPreselected]);
 
   const slot = SLOTS.find((s) => s.id === slotId);
   const typedRef = useRef(""); typedRef.current = typed;
@@ -5063,7 +4364,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
     const eRep = evalReport(r, tRep);
 
     setRep({ r, tRep, aRep, gRep, eRep, usedW: false, slot });
-    setPhase("analyzing");
+    setPhase("report");
     setPetals(true); setTimeout(() => setPetals(false), 3400);
     onFinish({ xp: 30 + Math.round(r.overall / 2), seconds: secs, kind: "topic" });
 
@@ -5077,19 +4378,10 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
 
   const watch = useStopwatch(slot.red + 30, finish);
 
-  useEffect(() => {
-    if (phase === "analyzing") {
-      const timer = setTimeout(() => {
-        setPhase("report");
-      }, 5200);
-      return () => clearTimeout(timer);
-    }
-  }, [phase]);
-
   const toggle = (c) => setCat((v) => (v.includes(c) ? (v.length > 1 ? v.filter((x) => x !== c) : v) : [...v, c]));
 
   const spin = () => {
-    setPhase("pick"); setRep(null); setAi(null); setAiState("idle"); setTyped(""); setDeepOpen(false); watch.reset();
+    setPhase("pick"); setRep(null); setAi(null); setAiState("idle"); setTyped(""); watch.reset();
     setSpinning(true);
     let i = 0;
     const id = setInterval(() => {
@@ -5109,232 +4401,14 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
     setPhase("live"); watch.start();
   };
 
-  if (phase === "analyzing") {
-    return <AnalyzingScreen />;
-  }
-
   if (phase === "report" && rep) {
     const { r, tRep, aRep, gRep, eRep, usedW } = rep;
     const vocab = ai && ai.vocab ? ai.vocab.map((v) => ({ was: v.weak, now: v.better, why: v.why, kind: "vocab" })) : [];
-
-    const cards = [];
-
-    cards.push(
-      <div className="card sun pcard" key="timer">
-        <CornerDecor emoji="⏳" />
-        <RoleHead role={ROLES[0]} />
-        <div className={"clock" + (r.seconds > rep.slot.red ? " over" : "")}>{fmt(r.seconds)}</div>
-        <Signal elapsed={r.seconds} slot={rep.slot} />
-        <div className="verdict {tRep.vclass}" style={{ display: "none" }} />
-        <div style={{ textAlign: "center" }}>
-          <span className={"verdict " + tRep.vclass}>
-            {tRep.verdict === "qualified" ? "qualifies" : tRep.verdict === "under" ? "under time" : "over time"}
-          </span>
-        </div>
-        <p style={{ fontSize: 15, lineHeight: 1.65, marginBottom: 0 }}>{tRep.line}</p>
-      </div>
-    );
-
-    cards.push(
-      <div className="card coral pcard" key="ah">
-        <CornerDecor emoji="🐚" />
-        <RoleHead role={ROLES[1]} />
-        <ThumbsBadge ok={aRep.soundPer < 3 && aRep.crutchTotal <= 2} />
-        <AhCounterBody a={aRep} extra={r.stumbles.length > 0 && (
-          <p className="ex" style={{ marginTop: 10 }}>
-            Also {r.stumbles.length} restart{r.stumbles.length === 1 ? "" : "s"} — “{r.stumbles[0].phrase}”. That's the sound of a sentence being rebuilt mid-air.
-          </p>
-        )} />
-      </div>
-    );
-
-    cards.push(
-      <div className="card moss pcard" key="gram">
-        <SailDecor />
-        <RoleHead role={ROLES[2]} />
-        <p style={{ fontSize: 15, lineHeight: 1.65 }}>{gRep.line}</p>
-
-        {gRep.junk.length > 0 && (
-          <>
-            <div className="eye" style={{ margin: "14px 0 8px" }}>Not recognised as words</div>
-            <div className="tally">
-              {gRep.junk.slice(0, 8).map((j) => <span className="tchip" key={j.word}>{j.word} <b>×{j.n}</b></span>)}
-            </div>
-          </>
-        )}
-        {r.registerCount > 0 && (
-          <>
-            <div className="eye" style={{ margin: "16px 0 8px" }}>Too casual for a panel</div>
-            <Corrections items={r.register.map((x) => ({ was: x.was, now: x.now, why: x.why, kind: "register" }))} />
-          </>
-        )}
-        {r.vagueCount >= 3 && (
-          <>
-            <div className="eye" style={{ margin: "16px 0 8px" }}>Vague words · {r.vagueCount}</div>
-            <div className="tally">
-              {r.vague.slice(0, 6).map((v) => <span className="tchip" key={v.word}>{v.word} <b>×{v.n}</b></span>)}
-            </div>
-            <p className="ex" style={{ marginTop: 8 }}>Each of these is a place a specific noun would have been stronger.</p>
-          </>
-        )}
-        {r.repeats && r.repeats.length > 0 && (
-          <>
-            <div className="eye" style={{ margin: "16px 0 8px" }}>Words you leaned on</div>
-            <div className="tally">
-              {r.repeats.slice(0, 5).map((v) => <span className="tchip" key={v.word}>{v.word} <b>×{v.n}</b></span>)}
-            </div>
-          </>
-        )}
-        {gRep.errs.length > 0 && (
-          <><div className="eye" style={{ margin: "16px 0 8px" }}>Grammar · {gRep.errs.length}</div>
-            <Corrections items={gRep.errs} /></>
-        )}
-        {gRep.regional.length > 0 && (
-          <><div className="eye" style={{ margin: "16px 0 8px" }}>Fine here, odd abroad</div>
-            <Corrections items={gRep.regional} /></>
-        )}
-      </div>
-    );
-
-    if (profile && (profile.blocks || []).length > 0) {
-      const checks = {
-        filler: ["Filler words", r.fillerCount, r.fillerCount <= 2],
-        ramble: ["Rambling", `${Math.round(r.concise.wastePct)}% wasted`, r.concise.score >= 65],
-        fast: ["Speaking too fast", `${r.wpm} wpm`, r.wpm <= 170],
-        slow: ["Trailing off", `${r.wpm} wpm`, r.wpm >= 110],
-        grammar: ["Grammar slips", r.grammar.filter((g) => g.kind === "grammar").length, r.accuracy >= 75],
-        vocab: ["Same few words", `${r.variety}% variety`, r.range >= 55],
-        long: ["Long sentences", r.concise.longOnes.length, r.concise.longOnes.length === 0],
-        repeat: ["Repeating myself", r.concise.repeatedIdeas.length, r.concise.repeatedIdeas.length === 0],
-        structure: ["No clear point", r.hasStance ? "took a position" : "no position", r.structure >= 60],
-        blank: ["Going blank", r.mode === "mic" ? `${Math.max(0, r.seconds - r.voiced)}s silence` : "—", r.mode !== "mic" || (r.seconds - r.voiced) <= 8],
-        nerves: ["Nerves", `${r.hedgeCount} hedges`, r.hedgeCount <= 3],
-      };
-      const rows = profile.blocks.map((b) => checks[b]).filter(Boolean);
-      if (rows.length) {
-        const won = rows.filter((x) => x[2]).length;
-        cards.push(
-          <div className="card moss pcard" key="targets">
-            <SpeechBubbleHeader label="Your own targets" sub={`${won} of ${rows.length} clear this rep`} />
-            {rows.map(([label, val, ok], i) => (
-              <div className="stat" key={i}>
-                <span>{label}</span><b className={ok ? "ok" : "bad"}>{val} {ok ? "✓" : "✗"}</b>
-              </div>
-            ))}
-          </div>
-        );
-      }
-    }
-
-    if (r.wc >= 12) {
-      cards.push(<ClarityCard r={r} key="clarity" />);
-    }
-
-    cards.push(
-      <div className="card sky pcard" key="eval">
-        <CornerDecor emoji="🧭" />
-        <RoleHead role={ROLES[3]} />
-        <div className="dials" style={{ margin: "6px 0 14px" }}>
-          {[["Structure", r.structure], ["Flow", r.fluency], ["Grammar", r.accuracy],
-            ["Range", r.range], ["Clarity", r.clarity100]].map(([k, v], i) => (
-            <ScoreDial key={k} label={k} value={v} delay={i * 0.08} />
-          ))}
-        </div>
-        <OverallCelebrate />
-        <p className="ex" style={{ marginTop: 10 }}>
-          Range is vocabulary reach: {r.sophistication}% of your content words went beyond the
-          everyday two thousand{r.vagueCount ? `, and ${r.vagueCount} vague word${r.vagueCount === 1 ? "" : "s"} pulled it down` : ""}.
-        </p>
-        {ai && (ai.structure || ai.flow || ai.content || ai.language || ai.coverage) && (
-          <>
-            <div className="eye" style={{ marginTop: 14 }}>The full picture</div>
-            {[["Structure", ai.structure], ["Flow", ai.flow], ["Content", ai.content],
-              ["Language", ai.language], ["Coverage", ai.coverage]].filter(([, v]) => v).map(([label, text]) => (
-              <p key={label} style={{ fontSize: 14.5, lineHeight: 1.6, margin: "8px 0 0" }}>
-                <b>{label}.</b> {text}
-              </p>
-            ))}
-          </>
-        )}
-        <div className="eye" style={{ marginTop: 14 }}>Commendation</div>
-        <p style={{ fontSize: 15.5, lineHeight: 1.65, marginTop: 6 }}>{ai && ai.commend ? ai.commend : eRep.commend}</p>
-        <div className="eye" style={{ marginTop: 14 }}>Recommendation</div>
-        <div className="note">{ai && ai.recommend ? ai.recommend : eRep.recommend}</div>
-        <TranslateButton text={ai && ai.recommend ? ai.recommend : eRep.recommend} />
-        {sarvamReady() && (
-          <button className="btn sm" style={{ marginTop: 10 }}
-            onClick={() => speakAs("coach", ai && ai.recommend ? ai.recommend : eRep.recommend, replyLangCode())}>
-            <span><Icon name="wave" size={16} /> Read it to me</span>
-          </button>
-        )}
-        {aiState === "loading" && <p className="ex" style={{ marginTop: 12 }}><span className="spin" />the evaluator is still writing…</p>}
-        {aiState === "offline" && <div className="tip" style={{ marginTop: 12 }}>
-          This evaluation was written from your measured numbers. Connect an API key for a written one that quotes you directly.
-        </div>}
-        <p className="ex" style={{ marginTop: 12 }}>
-          Structure counts three things: you took a position{r.hasStance ? " ✓" : " ✗"}, gave reasons ({r.connectives} connective{r.connectives === 1 ? "" : "s"}), and closed it{r.hasClose ? " ✓" : " ✗"}.
-        </p>
-      </div>
-    );
-
-    if (vocab.length > 0) {
-      cards.push(
-        <div className="card pcard" key="vocabswap">
-          <PearlOpenHeader label="Words the evaluator would swap" />
-          <Corrections items={vocab} />
-        </div>
-      );
-    }
-
-    if (r.clip && r.clip.url) {
-      cards.push(<Playback clip={r.clip} label="Hear it back" key="playback" />);
-    }
-
-    cards.push(
-      <div className="card pcard" key="transcript">
-        <CornerDecor emoji="📜" />
-        <div className="eye">The transcript{r.lang && !r.isEnglish ? ` · ${langName(r.lang.primary)}` : ""}</div>
-        <div className="script" style={{ marginTop: 8 }}>
-          {r.text ? renderClarity(r.text, r) : <span className="ex">Nothing came through. Check your microphone and try again.</span>}
-        </div>
-        <RomanToggle text={r.text} from={r.lang && r.lang.primary} />
-        <div className="legend">
-          <span><i style={{ background: "#FF9F7F" }} />filler</span>
-          <span><i style={{ background: "#EEDBB8" }} />hedge</span>
-          <span><i style={{ background: "#7A939A" }} />no work</span>
-          <span><i style={{ background: "#C99A4B" }} />wordy</span>
-          <span><i style={{ background: "#7EC8E3" }} />repeated idea</span>
-        </div>
-        <div className="stat" style={{ marginTop: 10 }}><span>Speed</span><b className={r.wpm >= 110 && r.wpm <= 170 ? "ok" : "warn"}>{r.wpm} wpm</b></div>
-        <RunTurtleBadge />
-        {r.mode === "mic" && <div className="stat"><span>Silence</span>
-          <b className={r.seconds - r.voiced > 15 ? "bad" : "ok"}>{Math.max(0, r.seconds - r.voiced)}s</b></div>}
-        <div className="stat"><span>Word variety</span><b className={r.variety > 55 ? "ok" : "warn"}>{r.variety}%</b></div>
-      </div>
-    );
-
-    cards.push(
-      <SummaryCard
-        key="actions"
-        r={r}
-        topic={topic}
-        onNewTopic={spin}
-        onHome={() => (go ? go("club") : setPhase("pick"))}
-      />
-    );
-
     return (
       <div>
-        <BeachAmbient />
         <Petals go={petals} />
-        <h1 className="h1" style={{ textShadow: "0 1px 12px rgba(255,255,255,.85), 0 0 30px rgba(255,255,255,.7)" }}>
-          {deepOpen ? <>The club <em>reports back</em></> : <>That's your <em>score</em></>}
-        </h1>
-        <p className="sub" style={{ color: "var(--ink)", fontWeight: 600, textShadow: "0 1px 10px rgba(255,255,255,.9)" }}>
-          {deepOpen
-            ? "Four role-players watched that. Here's each of them, in the order a real meeting runs."
-            : "Six measures, averaged. Open the breakdown when you want the detail."}
-        </p>
+        <h1 className="h1">The club <em>reports back</em></h1>
+        <p className="sub">Four role-players watched that. Here's each of them, in the order a real meeting runs.</p>
 
         {r.unintelligible && r.asrConfidence !== null && r.asrConfidence < 0.62 && (
           <div className="warnbox mascrow" style={{ alignItems: "flex-start" }}>
@@ -5360,40 +4434,194 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
           </div>
         )}
 
-        {deepOpen ? (
-          <>
-            <CardDeck
-              cards={cards}
-              onIndex={(i) => {
-                // confetti when the closing card is reached, once per arrival
-                if (i === cards.length - 1) { setPetals(true); setTimeout(() => setPetals(false), 3000); }
-              }}
-            />
-            <div style={{ textAlign: "center", marginTop: -6, marginBottom: 24 }}>
-              <button className="ghostlink" onClick={() => setDeepOpen(false)}>← Back to the score</button>
+        <div className="card sun">
+          <RoleHead role={ROLES[0]} />
+          <div className={"clock" + (r.seconds > rep.slot.red ? " over" : "")}>{fmt(r.seconds)}</div>
+          <Signal elapsed={r.seconds} slot={rep.slot} />
+          <div className="verdict {tRep.vclass}" style={{ display: "none" }} />
+          <div style={{ textAlign: "center" }}>
+            <span className={"verdict " + tRep.vclass}>
+              {tRep.verdict === "qualified" ? "qualifies" : tRep.verdict === "under" ? "under time" : "over time"}
+            </span>
+          </div>
+          <p style={{ fontSize: 15, lineHeight: 1.65, marginBottom: 0 }}>{tRep.line}</p>
+        </div>
+
+        <div className="card coral">
+          <RoleHead role={ROLES[1]} />
+          <AhCounterBody a={aRep} extra={r.stumbles.length > 0 && (
+            <p className="ex" style={{ marginTop: 10 }}>
+              Also {r.stumbles.length} restart{r.stumbles.length === 1 ? "" : "s"} — “{r.stumbles[0].phrase}”. That's the sound of a sentence being rebuilt mid-air.
+            </p>
+          )} />
+        </div>
+
+        <div className="card moss">
+          <RoleHead role={ROLES[2]} />
+          <p style={{ fontSize: 15, lineHeight: 1.65 }}>{gRep.line}</p>
+
+          {gRep.junk.length > 0 && (
+            <>
+              <div className="eye" style={{ margin: "14px 0 8px" }}>Not recognised as words</div>
+              <div className="tally">
+                {gRep.junk.slice(0, 8).map((j) => <span className="tchip" key={j.word}>{j.word} <b>×{j.n}</b></span>)}
+              </div>
+            </>
+          )}
+          {r.registerCount > 0 && (
+            <>
+              <div className="eye" style={{ margin: "16px 0 8px" }}>Too casual for a panel</div>
+              <Corrections items={r.register.map((x) => ({ was: x.was, now: x.now, why: x.why, kind: "register" }))} />
+            </>
+          )}
+          {r.vagueCount >= 3 && (
+            <>
+              <div className="eye" style={{ margin: "16px 0 8px" }}>Vague words · {r.vagueCount}</div>
+              <div className="tally">
+                {r.vague.slice(0, 6).map((v) => <span className="tchip" key={v.word}>{v.word} <b>×{v.n}</b></span>)}
+              </div>
+              <p className="ex" style={{ marginTop: 8 }}>Each of these is a place a specific noun would have been stronger.</p>
+            </>
+          )}
+          {r.repeats && r.repeats.length > 0 && (
+            <>
+              <div className="eye" style={{ margin: "16px 0 8px" }}>Words you leaned on</div>
+              <div className="tally">
+                {r.repeats.slice(0, 5).map((v) => <span className="tchip" key={v.word}>{v.word} <b>×{v.n}</b></span>)}
+              </div>
+            </>
+          )}
+          {gRep.errs.length > 0 && (
+            <><div className="eye" style={{ margin: "16px 0 8px" }}>Grammar · {gRep.errs.length}</div>
+              <Corrections items={gRep.errs} /></>
+          )}
+          {gRep.regional.length > 0 && (
+            <><div className="eye" style={{ margin: "16px 0 8px" }}>Fine here, odd abroad</div>
+              <Corrections items={gRep.regional} /></>
+          )}
+        </div>
+
+        {profile && (profile.blocks || []).length > 0 && (() => {
+          const checks = {
+            filler: ["Filler words", r.fillerCount, r.fillerCount <= 2],
+            ramble: ["Rambling", `${Math.round(r.concise.wastePct)}% wasted`, r.concise.score >= 65],
+            fast: ["Speaking too fast", `${r.wpm} wpm`, r.wpm <= 170],
+            slow: ["Trailing off", `${r.wpm} wpm`, r.wpm >= 110],
+            grammar: ["Grammar slips", r.grammar.filter((g) => g.kind === "grammar").length, r.accuracy >= 75],
+            vocab: ["Same few words", `${r.variety}% variety`, r.range >= 55],
+            long: ["Long sentences", r.concise.longOnes.length, r.concise.longOnes.length === 0],
+            repeat: ["Repeating myself", r.concise.repeatedIdeas.length, r.concise.repeatedIdeas.length === 0],
+            structure: ["No clear point", r.hasStance ? "took a position" : "no position", r.structure >= 60],
+            blank: ["Going blank", r.mode === "mic" ? `${Math.max(0, r.seconds - r.voiced)}s silence` : "—", r.mode !== "mic" || (r.seconds - r.voiced) <= 8],
+            nerves: ["Nerves", `${r.hedgeCount} hedges`, r.hedgeCount <= 3],
+          };
+          const rows = profile.blocks.map((b) => checks[b]).filter(Boolean);
+          if (!rows.length) return null;
+          const won = rows.filter((x) => x[2]).length;
+          return (
+            <div className="card moss">
+              <div className="role">
+                <div className="rbadge"><Mascot mood="inspect" size={46} /></div>
+                <div><div className="rname">Your own targets</div>
+                  <div className="rrole">{won} of {rows.length} clear this rep</div></div>
+              </div>
+              {rows.map(([label, val, ok], i) => (
+                <div className="stat" key={i}>
+                  <span>{label}</span><b className={ok ? "ok" : "bad"}>{val} {ok ? "✓" : "✗"}</b>
+                </div>
+              ))}
             </div>
-          </>
-        ) : (
-          <ScoreReveal r={r} deckCount={cards.length} onOpen={() => setDeepOpen(true)} />
+          );
+        })()}
+
+        <ClarityCard r={r} aiRewrites={ai && ai.rewrites} />
+
+        <div className="card sky">
+          <RoleHead role={ROLES[3]} />
+          <div className="dials" style={{ margin: "6px 0 14px" }}>
+            {[["Structure", r.structure], ["Flow", r.fluency], ["Grammar", r.accuracy],
+              ["Range", r.range], ["Clarity", r.clarity100]].map(([k, v], i) => (
+              <ScoreDial key={k} label={k} value={v} delay={i * 0.08} />
+            ))}
+          </div>
+          <p className="ex" style={{ marginTop: 10 }}>
+            Range is vocabulary reach: {r.sophistication}% of your content words went beyond the
+            everyday two thousand{r.vagueCount ? `, and ${r.vagueCount} vague word${r.vagueCount === 1 ? "" : "s"} pulled it down` : ""}.
+          </p>
+          {ai && (ai.structure || ai.flow || ai.content || ai.language || ai.coverage) && (
+            <>
+              <div className="eye" style={{ marginTop: 14 }}>The full picture</div>
+              {[["Structure", ai.structure], ["Flow", ai.flow], ["Content", ai.content],
+                ["Language", ai.language], ["Coverage", ai.coverage]].filter(([, v]) => v).map(([label, text]) => (
+                <p key={label} style={{ fontSize: 14.5, lineHeight: 1.6, margin: "8px 0 0" }}>
+                  <b>{label}.</b> {text}
+                </p>
+              ))}
+            </>
+          )}
+          <div className="eye" style={{ marginTop: 14 }}>Commendation</div>
+          <p style={{ fontSize: 15.5, lineHeight: 1.65, marginTop: 6 }}>{ai && ai.commend ? ai.commend : eRep.commend}</p>
+          <div className="eye" style={{ marginTop: 14 }}>Recommendation</div>
+          <div className="note">{ai && ai.recommend ? ai.recommend : eRep.recommend}</div>
+          <TranslateButton text={ai && ai.recommend ? ai.recommend : eRep.recommend} />
+          {sarvamReady() && (
+            <button className="btn sm" style={{ marginTop: 10 }}
+              onClick={() => speakAs("coach", ai && ai.recommend ? ai.recommend : eRep.recommend, replyLangCode())}>
+              <span><Icon name="wave" size={16} /> Read it to me</span>
+            </button>
+          )}
+          {aiState === "loading" && <p className="ex" style={{ marginTop: 12 }}><span className="spin" />the evaluator is still writing…</p>}
+          {aiState === "offline" && <div className="tip" style={{ marginTop: 12 }}>
+            This evaluation was written from your measured numbers. Connect an API key for a written one that quotes you directly.
+          </div>}
+          <p className="ex" style={{ marginTop: 12 }}>
+            Structure counts three things: you took a position{r.hasStance ? " ✓" : " ✗"}, gave reasons ({r.connectives} connective{r.connectives === 1 ? "" : "s"}), and closed it{r.hasClose ? " ✓" : " ✗"}.
+          </p>
+        </div>
+
+        {vocab.length > 0 && (
+          <div className="card"><div className="eye" style={{ marginBottom: 12 }}>Words the evaluator would swap</div>
+            <Corrections items={vocab} /></div>
         )}
+
+        <Playback clip={r.clip} label="Hear it back" />
+
+        <div className="card">
+          <div className="eye">The transcript{r.lang && !r.isEnglish ? ` · ${langName(r.lang.primary)}` : ""}</div>
+          <div className="script" style={{ marginTop: 8 }}>
+            {r.text ? renderClarity(r.text, r) : <span className="ex">Nothing came through. Check your microphone and try again.</span>}
+          </div>
+          <RomanToggle text={r.text} from={r.lang && r.lang.primary} />
+          <div className="legend">
+            <span><i style={{ background: "#FF9F7F" }} />filler</span>
+            <span><i style={{ background: "#EEDBB8" }} />hedge</span>
+            <span><i style={{ background: "#7A939A" }} />no work</span>
+            <span><i style={{ background: "#C99A4B" }} />wordy</span>
+            <span><i style={{ background: "#7EC8E3" }} />repeated idea</span>
+          </div>
+          <div className="stat" style={{ marginTop: 10 }}><span>Speed</span><b className={r.wpm >= 110 && r.wpm <= 170 ? "ok" : "warn"}>{r.wpm} wpm</b></div>
+          {r.mode === "mic" && <div className="stat"><span>Silence</span>
+            <b className={r.seconds - r.voiced > 15 ? "bad" : "ok"}>{Math.max(0, r.seconds - r.voiced)}s</b></div>}
+          <div className="stat"><span>Word variety</span><b className={r.variety > 55 ? "ok" : "warn"}>{r.variety}%</b></div>
+        </div>
+
+        <div className="row">
+          <button className="btn go" onClick={spin}>Next topic</button>
+          <button className="btn" onClick={() => setPhase("pick")}>Back</button>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
-      {phase !== "live" && (
-        <>
-          <h1 className="h1">Table Topics.<br /><em>No prep, on the clock.</em></h1>
-          <p className="sub">
-            Spin a topic and speak. The Timer shows green when you qualify and red at the limit — exactly
-            like a real meeting.
-          </p>
-          <Notice mic={mic} />
-        </>
-      )}
+      <h1 className="h1">Table Topics.<br /><em>No prep, on the clock.</em></h1>
+      <p className="sub">
+        Spin a topic and speak. The Timer shows green when you qualify and red at the limit — exactly
+        like a real meeting.
+      </p>
+      <Notice mic={mic} />
 
-      {phase === "pick" && <LanguageBar mic={mic} />}
 
 
       {phase !== "live" && (
@@ -5442,16 +4670,23 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
       )}
 
       {phase === "live" && (
-        <RecordingScreen
-          title="Table Topics"
-          elapsed={watch.t}
-          totalLabel={slot.label}
-          mic={mic}
-          onStop={() => finish()}
-          onBack={() => { mic.stop(); watch.stop(); watch.reset(); setPhase("pick"); }}
-        />
+        <div className="card coral">
+          <div className="tag">on the clock</div>
+          <div className={"clock" + (watch.t > slot.red ? " over" : "")}>{fmt(watch.t)} <small>of {slot.label}</small></div>
+          <div className="vine">
+            <i className={watch.t >= slot.red ? "r" : watch.t >= slot.amber ? "a" : ""}
+              style={{ width: `${Math.min(100, (watch.t / slot.red) * 100)}%` }} />
+          </div>
+          <Signal elapsed={watch.t} slot={slot} />
+          <Grass level={mic.level} live={mic.speaking} />
+          <div className="script" style={{ marginTop: 10 }} role="log" aria-live="polite" aria-atomic="false">
+            {mic.finalText}<span className="interim">{mic.interim}</span>
+          </div>
+          <div className="row" style={{ marginTop: 14 }}>
+            <button className="btn leaf" onClick={() => finish()}>Finish speech</button>
+          </div>
+        </div>
       )}
-
     </div>
   );
 }
@@ -5639,332 +4874,402 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
 }
 
 /* ================================= CLUB ================================== */
-/* Home screen: tropical-island "mission control" — hero CTA, palm-tree
-   streak, three quick-practice modes, word of the day, stats, and the
-   7-day Island Challenge. All illustrations below are hand-drawn SVG
-   placeholders (see swap notes at the end of the design task) — drop real
-   art into /public/images/home/ and swap the <Xxx Art /> internals when
-   it's ready; every call site (art props, ShellArt, etc.) stays the same. */
 
-const CLUB_CSS = `
-@keyframes clubWaveDrift{0%{transform:translateX(0)}100%{transform:translateX(-25%)}}
-@keyframes clubFoamPulse{0%,100%{opacity:.55}50%{opacity:.9}}
-@keyframes clubPalmSway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
-@keyframes clubBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-@keyframes clubRipple{0%{box-shadow:0 0 0 0 rgba(10,158,196,.35)}100%{box-shadow:0 0 0 18px rgba(10,158,196,0)}}
-.club-wave{animation:clubWaveDrift 9s linear infinite alternate}
-.club-wave-front{animation-duration:6.5s}
-.club-foam{animation:clubFoamPulse 3.4s ease-in-out infinite}
-.club-turtle{animation:clubBob 4.5s ease-in-out infinite}
-.club-palm-sway{transform-origin:bottom center;animation:clubPalmSway 3.2s ease-in-out infinite}
-.club-cta:active{animation:clubRipple .5s ease-out}
-.club-shell-pop:hover .club-shell-art{transform:scale(1.08) rotate(-4deg)}
-.club-shell-art{transition:transform .3s cubic-bezier(.2,.9,.3,1)}
-@media (prefers-reduced-motion: reduce){.club-wave,.club-foam,.club-turtle,.club-palm-sway{animation:none}}
-`;
-
-/* ---- illustration placeholders (swap for real art later; see notes) ---- */
-
-/* turtle-hero.png is a square studio shot (opaque background, not a cutout),
-   so it's framed as a badge rather than floated free over the wave. */
-function HeroTurtleArt({ className }) {
-  return (
-    <img src="/images/home/turtle-hero.png" alt="Yap the turtle waving with a microphone" className={`object-contain drop-shadow-lg ${className || ""}`} />
-  );
-}
-
-function WaveDecor() {
-  return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-20 overflow-hidden" aria-hidden="true">
-      <svg className="club-wave absolute bottom-0 left-0 h-16 w-[220%] text-ocean-blue/35" viewBox="0 0 800 80" preserveAspectRatio="none">
-        <path d="M0,40 C100,10 200,60 300,40 C400,20 500,60 600,40 C700,20 800,50 800,40 L800,80 L0,80 Z" fill="currentColor" />
-      </svg>
-      <svg className="club-wave club-wave-front absolute bottom-0 left-0 h-11 w-[220%] text-lagoon/70" viewBox="0 0 800 80" preserveAspectRatio="none">
-        <path d="M0,50 C100,30 200,60 300,45 C400,30 500,65 600,45 C700,25 800,55 800,45 L800,80 L0,80 Z" fill="currentColor" />
-      </svg>
-      <div className="club-foam absolute inset-x-0 bottom-0 h-4 bg-gradient-to-t from-white/95 to-white/0" />
-    </div>
-  );
-}
-
-function ShellPearlArt({ className }) {
-  return <img src="/images/home/shell-pearl.png" alt="" className={`club-shell-art object-contain ${className || ""}`} />;
-}
-
-function ShellArt({ state, size = 26 }) {
-  const src = state === "done" ? "/images/home/shell-done.png" : state === "today" ? "/images/home/shell-today.png" : "/images/home/shell-future.png";
-  return (
-    <img
-      src={src}
-      alt=""
-      width={size}
-      height={size}
-      style={{ width: size, height: size }}
-      className={`object-contain ${state === "today" ? "club-turtle" : ""}`}
-    />
-  );
-}
-
-function CoconutArt({ className }) {
-  return <img src="/images/home/coconut-coins.png" alt="" className={`object-contain ${className || ""}`} />;
-}
-
-function ChestArt({ className }) {
-  return <img src="/images/home/treasure-chest.png" alt="" className={`object-contain ${className || ""}`} />;
-}
-
-function SpeakerIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" {...props}>
-      <path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" />
-      <path d="M16.5 8.5a5 5 0 010 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-    </svg>
-  );
-}
-function MicIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect x="9" y="2" width="6" height="12" rx="3" />
-      <path d="M5 10a7 7 0 0014 0" />
-      <path d="M12 19v3" />
-    </svg>
-  );
-}
-function StarIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-      <path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z" />
-    </svg>
-  );
-}
-function ClockIcon(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 3" />
-    </svg>
-  );
-}
-
-function QuickModeCard({ title, blurb, onClick, img }) {
-  return (
-    <button
-      onClick={onClick}
-      className="group relative flex min-h-[160px] flex-col overflow-hidden rounded-[22px] border border-white/50 text-left shadow-[0_12px_28px_rgba(10,158,196,.10)] transition active:scale-[.97]"
-      style={{
-        backgroundImage: `url(${img})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
-      <div className="absolute inset-0 bg-gradient-to-b from-black/35 to-black/25" />
-      <div className="relative flex flex-1 flex-col justify-end p-4">
-        <div className="font-[var(--dis)] text-[20px] font-bold leading-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,.4)]">{title}</div>
-        <div className="mt-1 text-[14px] leading-snug text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,.3)]">{blurb}</div>
-        <span className="absolute bottom-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-white/90 text-ink shadow-sm transition group-active:scale-90">
-          <Icon name="arrow" size={14} />
-        </span>
-      </div>
-    </button>
-  );
-}
-
-function StatPill({ icon, value, label, tone }) {
-  return (
-    <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-white/50 bg-white/55 py-3.5 shadow-[0_10px_24px_rgba(10,158,196,.08)] backdrop-blur-xl">
-      <span className={tone}>{icon}</span>
-      <div className="font-[var(--dis)] text-[18px] font-extrabold leading-none text-ink">{value}</div>
-      <div className="text-[9.5px] font-semibold uppercase tracking-[.08em] text-ink/50">{label}</div>
-    </div>
-  );
-}
-
-function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, profile, replay, startWithRandomTopic }) {
-  const { user, profile: authProfile } = useAuth();
+function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, profile, replay }) {
   const plan = PLANS.find((p) => p.id === active) || PLANS[1];
-  const challenge = PLANS.find((p) => p.id === 7) || PLANS[0];
-  const onChallenge = active === challenge.id;
-
-  // Use backend streak data if available, fallback to localStorage days
-  const backendStreak = authProfile?.streak || 0;
-  const localStreak = days.length;
-  const actualStreak = backendStreak > 0 ? backendStreak : localStreak;
-
-  const challengeDays = onChallenge ? days : [];
-  const challengeEarned = Math.min(actualStreak, 7) * challenge.back;
-  const challengeRemaining = Math.max(0, challenge.fee - challengeEarned);
-
+  const earned = Math.min(days.length, plan.id) * plan.back;
+  const net = Math.max(0, plan.fee - earned);
+  const stage = stageFor(stats.reps);
+  const doneCount = [agenda.vocab, agenda.topic].filter(Boolean).length;
+  const coreDone = doneCount === 2;
+  
+  const currentDay = Math.min(days.length + 1, plan.id);
   const timeOfDay = new Date().getHours();
   const greeting = timeOfDay < 12 ? "Good morning" : timeOfDay < 17 ? "Good afternoon" : "Good evening";
-  const rawName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "";
-  const firstName = (rawName.split("@")[0].split(" ")[0] || "there").trim();
 
-  const nextStep = agenda.vocab ? (agenda.topic ? "debate" : "topics") : "vocab";
-
-  // Palm images mapped to height progression: seed → sprout → small → medium → tall
-  const palmImages = [
-    "/images/home/palm-seed.png",      // Day 1
-    "/images/home/palm-spourt.png",    // Day 2
-    "/images/home/palm-small.png",     // Day 3
-    "/images/home/plam-medium.png",    // Day 4
-    "/images/home/palm-tall.png",      // Day 5+
+  const JOURNEY = [
+    { id: "vocab", short: "Word", icon: "", label: wotd.w, sublabel: "Word of the Day", blurb: "Use it in a sentence. 30 seconds.", done: agenda.vocab, dest: "vocab" },
+    { id: "topic", short: "Table Topic", icon: "💬", label: "Table Topic", sublabel: "Impromptu speaking", blurb: "One topic, on the clock, evaluated by four roles.", done: agenda.topic, dest: "topics" },
+    { id: "debate", short: "Debate", icon: "⚡", label: "Debate", sublabel: "Bonus round", blurb: "Pick a side, prepare, defend on the clock.", done: false, dest: "debate" },
   ];
-  const palmSizes = [32, 36, 40, 44, 48];
+  
+  const currentStep = JOURNEY.find((t) => !t.done) || JOURNEY[JOURNEY.length - 1];
+  const currentIndex = JOURNEY.findIndex((t) => t.id === currentStep.id);
 
-  // Map streak to appropriate palm stage for 7-day challenge
-  const getPalmStage = (dayNum) => {
-    if (dayNum > actualStreak) return 0; // future days = seed
-    if (dayNum <= 1) return 0; // day 1 = seed
-    if (dayNum <= 2) return 1; // day 2 = sprout
-    if (dayNum <= 3) return 2; // day 3 = small
-    if (dayNum <= 4) return 3; // day 4 = medium
-    return 4; // day 5+ = tall
-  };
+  const [carouselIdx, setCarouselIdx] = useState(currentIndex);
 
-  const speakWord = useCallback(() => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    const u = new SpeechSynthesisUtterance(wotd.w);
-    u.lang = "en-IN";
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
-  }, [wotd.w]);
+  useEffect(() => {
+    setCarouselIdx(currentIndex);
+  }, [currentIndex]);
 
   return (
-    <div className="space-y-5 pb-2">
-      <style>{CLUB_CSS}</style>
+    <div>
+      {/* HERO SECTION - Personal morning ritual */}
+      <div className="hero-greeting">
+        <div className="eye" style={{ marginBottom: 6 }}>{greeting}</div>
+        <h1 className="h1" style={{ margin: "0 0 4px" }}>Today&apos;s <em>practice</em></h1>
+        <p className="sub" style={{ margin: "0 0 24px", maxWidth: "42ch" }}>
+          Day {currentDay} of your {plan.id}-day {plan.name}. 
+          Two quick exercises, done most days in under 5 minutes.
+        </p>
+      </div>
 
-      {/* HERO MISSION CARD */}
-      <section className="relative overflow-hidden rounded-card border border-white/50 bg-gradient-to-b from-foam/95 to-lagoon/30 shadow-[0_20px_60px_rgba(10,158,196,.12)] backdrop-blur-xl">
-        <div className="relative z-10 flex items-end gap-4 p-6 pb-16 sm:p-7 sm:pb-20">
-          <div className="club-turtle shrink-0">
-            <HeroTurtleArt className="h-44 w-44 drop-shadow-[0_12px_20px_rgba(10,158,196,.25)] sm:h-52 sm:w-52" />
-          </div>
-          <div className="min-w-0 flex-1 pb-2">
-            <p className="m-0 text-[14.5px] font-semibold text-ink/80">{greeting}, {firstName}! 👋</p>
-            <p className="mb-0 mt-2 text-[11px] font-bold uppercase tracking-[.14em] text-deep-ocean">~ Today&apos;s Mission ~</p>
-            <h1 className="mb-0 mt-1 font-[var(--dis)] text-[28px] font-extrabold leading-[1.05] tracking-tight text-ink sm:text-[34px]">
-              Speak for<br />60 seconds
-            </h1>
-            <p className="mb-5 mt-2 text-[13px] text-ink/70">~ One take. One step closer. 🌊</p>
-            <button
-              onClick={() => {
-                // Pick a random topic from Table Topics
-                const defaultTopics = TOPICS["Table Topics"] || [];
-                const randomTopic = defaultTopics[Math.floor(Math.random() * defaultTopics.length)];
-                startWithRandomTopic(randomTopic);
-              }}
-              className="club-cta inline-flex items-center gap-2 rounded-btn bg-deep-ocean px-6 py-3.5 text-[15px] font-bold text-white shadow-[0_14px_30px_rgba(8,126,164,.4)] transition active:scale-[.97]"
-            >
-              Start Speaking
-              <Icon name="arrow" size={18} />
-            </button>
+      {/* FOCUS CAROUSEL */}
+      <div className="carousel-container" style={{ position: "relative", marginBottom: 24, overflow: "visible" }}>
+        
+        {/* Navigation Arrows */}
+        {carouselIdx > 0 && (
+          <button 
+            className="carousel-arrow prev" 
+            onClick={() => setCarouselIdx(carouselIdx - 1)}
+            aria-label="Previous exercise"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+        )}
+        
+        {carouselIdx < JOURNEY.length - 1 && (
+          <button 
+            className="carousel-arrow next" 
+            onClick={() => setCarouselIdx(carouselIdx + 1)}
+            aria-label="Next exercise"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        )}
+
+        <div className="carousel-viewport">
+          <div className="carousel-track" style={{ 
+            transform: `translateX(-${carouselIdx * 100}%)` 
+          }}>
+            {JOURNEY.map((step, idx) => {
+              const isDone = step.done;
+              const isWord = step.id === "vocab";
+              const isTopic = step.id === "topic";
+              const isDebate = step.id === "debate";
+              
+              let themeClass = "coral";
+              if (isWord) themeClass = "sun";
+              if (isDebate) themeClass = "sky";
+              if (isDone) themeClass = "moss";
+              
+              return (
+                <div key={step.id} className={`card ${themeClass} focus-card carousel-slide`}>
+                  {/* Status/Progress Tag */}
+                  {isDone ? (
+                    <div className="tag" style={{ background: "var(--good)", boxShadow: "0 6px 14px rgba(123,174,143,.35)" }}>✓ Completed</div>
+                  ) : isDebate ? (
+                    <div className="tag">Bonus</div>
+                  ) : (
+                    <div className="tag" style={{ background: "var(--ocean)", boxShadow: "0 6px 14px rgba(126,200,227,.35)" }}>{idx + 1} of 2</div>
+                  )}
+                  
+                  {/* Slide Content */}
+                  <div className="focus-header" style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 16 }}>
+                    {/* Icon section */}
+                    {isWord && (
+                      <div className="focus-icon-circle sun">
+                        <Mascot mood="curious" size={38} />
+                      </div>
+                    )}
+                    {isTopic && (
+                      <div className="focus-icon-circle coral" style={{ fontSize: 26 }}>
+                        💬
+                      </div>
+                    )}
+                    {isDebate && (
+                      <div className="focus-icon-circle sky" style={{ fontSize: 26 }}>
+                        ⚡
+                      </div>
+                    )}
+                    
+                    <div style={{ flex: 1 }}>
+                      <div className="eye" style={{ marginBottom: 4 }}>{step.sublabel}</div>
+                      
+                      {isWord ? (
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                          <h2 style={{ fontFamily: "var(--dis)", fontWeight: 700, fontSize: 30, letterSpacing: "-.01em", margin: 0, color: "var(--ink)" }}>
+                            {wotd.w}
+                          </h2>
+                          <span className="pos" style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--coral-deep)" }}>
+                            {wotd.p}
+                          </span>
+                        </div>
+                      ) : (
+                        <h2 style={{ fontFamily: "var(--dis)", fontWeight: 700, fontSize: 26, letterSpacing: "-.01em", margin: 0, color: "var(--ink)" }}>
+                          {step.label}
+                        </h2>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {isWord ? (
+                    <div style={{ marginBottom: 18 }}>
+                      <p className="ex" style={{ margin: "0 0 6px", fontSize: 15.5, color: "var(--ink)", lineHeight: 1.5 }}>
+                        {wotd.d}
+                      </p>
+                      {wotd.e && (
+                        <p className="ex" style={{ margin: 0, fontStyle: "italic", fontSize: 13.5, opacity: 0.85 }}>
+                          “{wotd.e}”
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="ex" style={{ margin: "0 0 18px", fontSize: 15, lineHeight: 1.5 }}>{step.blurb}</p>
+                  )}
+                  
+                  {/* Action Button */}
+                  {isDone ? (
+                    <button className="btn leaf" style={{ width: "100%", padding: "15px 24px" }} onClick={() => go(step.dest)}>
+                      <span style={{ fontSize: 16 }}>Practice Again <Icon name="arrow" size={20} /></span>
+                    </button>
+                  ) : (
+                    <button className="btn go" style={{ width: "100%", padding: "15px 24px" }} onClick={() => go(step.dest)}>
+                      <span style={{ fontSize: 16 }}>Start Speaking <Icon name="arrow" size={20} /></span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
-        <WaveDecor />
-      </section>
 
-      {/* QUICK MODE ROW */}
-      <section className="grid grid-cols-3 gap-3">
-        <QuickModeCard title="Vocabulary" blurb="Word practice, one at a time." onClick={() => go("vocab")} img="/images/home/meeting-beach.png" />
-        <QuickModeCard title="Table Topics" blurb="Think fast. Speak smart." onClick={() => go("topics")} img="/images/home/dice-slpash.png" />
-        <QuickModeCard title="Debate" blurb="Pick a side. Defend it well." onClick={() => go("debate")} img="/images/home/surf-vs.png" />
-      </section>
-
-      {/* WORD OF THE DAY */}
-      <section className="club-shell-pop flex items-center gap-3 rounded-card border border-white/50 bg-white/55 p-4 shadow-[0_16px_40px_rgba(10,158,196,.08)] backdrop-blur-xl">
-        <button onClick={speakWord} className="shrink-0" aria-label={`Play pronunciation of ${wotd.w}`}>
-          <ShellPearlArt className="h-11 w-11" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="text-[10.5px] font-bold uppercase tracking-[.12em] text-ink/50">Word of the Day</div>
-          <div className="flex items-center gap-2">
-            <span className="font-[var(--dis)] text-[19px] font-extrabold text-ink">{wotd.w}</span>
-            <button onClick={speakWord} aria-label="Play pronunciation" className="text-ink/40 transition hover:text-deep-ocean">
-              <SpeakerIcon className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        <button onClick={() => go("vocab")} className="shrink-0 text-[13px] font-bold text-deep-ocean underline decoration-2 underline-offset-2">
-          Explore →
-        </button>
-      </section>
-
-      {/* STATS ROW */}
-      <section className="grid grid-cols-3 gap-3">
-        <StatPill icon={<MicIcon className="h-5 w-5" />} value={stats.reps} label="Speeches" tone="text-ocean-blue" />
-        <StatPill icon={<StarIcon className="h-5 w-5" />} value={stats.xp} label="Points" tone="text-gold" />
-        <StatPill icon={<ClockIcon className="h-5 w-5" />} value={`${Math.round(stats.seconds / 60)}m`} label="Mic Time" tone="text-palm-green" />
-      </section>
-
-      {/* ISLAND CHALLENGE */}
-      <section className="relative overflow-hidden rounded-card border border-white/50 bg-gradient-to-b from-warm-sand/70 to-foam/50 p-5 shadow-[0_16px_40px_rgba(10,158,196,.1)] backdrop-blur-xl">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="m-0 font-[var(--dis)] text-[18px] font-bold text-ink">🌴 7-Day Island Challenge</h2>
-            <p className="mb-0 mt-1 text-[12.5px] text-ink/60">Day {actualStreak} of 7 · Speak daily. Earn rewards.</p>
-          </div>
-          {actualStreak > 0 ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-btn bg-palm-green px-3 py-1 text-[11px] font-bold text-white">● Active</span>
-          ) : (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-btn bg-ink/10 px-3 py-1 text-[11px] font-bold text-ink/60">Not started</span>
-          )}
-        </div>
-
-        <div className="mt-5 flex items-end justify-center gap-2">
-          {Array.from({ length: 7 }, (_, i) => i + 1).map((d) => {
-            const stageIdx = getPalmStage(d);
-            const isDone = d <= actualStreak;
-            const isToday = d === actualStreak + 1 && actualStreak < 7;
-            const palmSrc = palmImages[stageIdx];
-            const palmSize = palmSizes[stageIdx];
-
+        {/* Carousel Indicators / Dots */}
+        <div className="carousel-dots">
+          {JOURNEY.map((step, idx) => {
+            const isDone = step.done;
+            const isActive = idx === carouselIdx;
             return (
-              <div key={d} className="flex flex-col items-center gap-1">
-                <img
-                  src={palmSrc}
-                  alt=""
-                  style={{ width: palmSize, height: palmSize }}
-                  className={`object-contain ${isDone ? "opacity-100" : "opacity-50"}`}
-                />
-                <span className={`text-[9px] font-semibold ${isToday ? "text-deep-ocean font-bold" : isDone ? "text-palm-green" : "text-ink/40"}`}>Day {d}</span>
-              </div>
+              <button
+                key={step.id}
+                onClick={() => setCarouselIdx(idx)}
+                className={`carousel-dot ${isActive ? "active" : ""} ${isDone ? "done" : ""}`}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
             );
           })}
         </div>
+      </div>
 
-        <div className="mt-5 flex items-center gap-3 rounded-2xl bg-white/55 p-3">
-          <div className="flex flex-1 items-center gap-2">
-            <CoconutArt className="h-8 w-8 shrink-0" />
-            <div className="min-w-0">
-              <div className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-ink/50">Earned back</div>
-              <div className="font-[var(--dis)] text-[15px] font-extrabold text-palm-green">₹{challengeEarned}</div>
+      {/* PROGRESS CARD - Mascot integration */}
+      <div className="card sky" style={{ position: "relative", overflow: "visible", marginBottom: 32 }}>
+        <div className="progress-mascot" style={{ 
+          position: "absolute", 
+          right: 20, 
+          top: -30, 
+          zIndex: 2,
+          filter: "drop-shadow(0 8px 20px rgba(31,79,91,.14))"
+        }}>
+          <Mascot 
+            mood={stats.reps >= 18 ? "cool" : stats.reps >= 6 ? "wave" : stats.reps >= 1 ? "curious" : "confused"}
+            size={88} 
+            className="masc-bob" 
+          />
+        </div>
+        
+        <div style={{ paddingRight: 100 }}>
+          <div className="stagelbl" style={{ fontSize: 21, marginBottom: 4 }}>{stage.name}</div>
+          <p className="ex" style={{ margin: 0, fontSize: 14 }}>{stage.note}</p>
+        </div>
+        
+        <div className="stats-row" style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <div className="stat-card" style={{ 
+            flex: 1, 
+            background: "var(--surf2)", 
+            border: "1px solid var(--line)", 
+            borderRadius: 16, 
+            padding: "12px 8px", 
+            textAlign: "center" 
+          }}>
+            <div style={{ fontSize: 20, marginBottom: 4, opacity: 0.7 }}>🎤</div>
+            <div style={{ fontFamily: "var(--bod)", fontWeight: 800, fontSize: 20, color: "var(--ink)" }}>
+              {stats.reps}
+            </div>
+            <div style={{ 
+              fontFamily: "var(--bod)", 
+              fontWeight: 600, 
+              fontSize: 9, 
+              letterSpacing: ".08em", 
+              textTransform: "uppercase", 
+              color: "var(--ink3)",
+              marginTop: 2
+            }}>
+              Speeches
             </div>
           </div>
-          <div className="h-8 w-px shrink-0 bg-ink/10" />
-          <div className="flex flex-1 items-center gap-2">
-            <ChestArt className="h-8 w-8 shrink-0" />
-            <div className="min-w-0">
-              <div className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-ink/50">Remaining at risk</div>
-              <div className="font-[var(--dis)] text-[15px] font-extrabold text-coral">₹{challengeRemaining}</div>
+          
+          <div className="stat-card" style={{ 
+            flex: 1, 
+            background: "var(--surf2)", 
+            border: "1px solid var(--line)", 
+            borderRadius: 16, 
+            padding: "12px 8px", 
+            textAlign: "center" 
+          }}>
+            <div style={{ fontSize: 20, marginBottom: 4, opacity: 0.7 }}>⭐</div>
+            <div style={{ fontFamily: "var(--bod)", fontWeight: 800, fontSize: 20, color: "var(--ink)" }}>
+              {stats.xp}
+            </div>
+            <div style={{ 
+              fontFamily: "var(--bod)", 
+              fontWeight: 600, 
+              fontSize: 9, 
+              letterSpacing: ".08em", 
+              textTransform: "uppercase", 
+              color: "var(--ink3)",
+              marginTop: 2
+            }}>
+              Points
+            </div>
+          </div>
+          
+          <div className="stat-card" style={{ 
+            flex: 1, 
+            background: "var(--surf2)", 
+            border: "1px solid var(--line)", 
+            borderRadius: 16, 
+            padding: "12px 8px", 
+            textAlign: "center" 
+          }}>
+            <div style={{ fontSize: 20, marginBottom: 4, opacity: 0.7 }}>⏱️</div>
+            <div style={{ fontFamily: "var(--bod)", fontWeight: 800, fontSize: 20, color: "var(--ink)" }}>
+              {Math.round(stats.seconds / 60)}m
+            </div>
+            <div style={{ 
+              fontFamily: "var(--bod)", 
+              fontWeight: 600, 
+              fontSize: 9, 
+              letterSpacing: ".08em", 
+              textTransform: "uppercase", 
+              color: "var(--ink3)",
+              marginTop: 2
+            }}>
+              Mic Time
             </div>
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            if (!onChallenge) { setActive(7); setDays([]); }
-            go(nextStep);
-          }}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-btn bg-deep-ocean py-3.5 text-[15px] font-bold text-white shadow-[0_14px_30px_rgba(8,126,164,.35)] transition active:scale-[.98]"
-        >
-          {onChallenge ? "Continue Challenge" : "Start Challenge"}
-          <Icon name="arrow" size={18} />
-        </button>
-      </section>
+        {profile && (profile.blocks || []).length > 0 && (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px dashed var(--line)" }}>
+            <div className="eye" style={{ marginBottom: 10, fontSize: 9.5 }}>You asked us to watch</div>
+            <div className="bank">
+              {profile.blocks.map((b) => {
+                const meta = BLOCKS.find((x) => x.id === b);
+                return meta ? <span className="seed" key={b} style={{ fontSize: 11 }}>{meta.label}</span> : null;
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* STREAK SECTION - Growth stages */}
+      <div style={{ marginBottom: 32 }}>
+        <h2 style={{ 
+          fontFamily: "var(--dis)", 
+          fontWeight: 700, 
+          fontSize: 22, 
+          letterSpacing: "-.01em", 
+          margin: "0 0 8px", 
+          color: "var(--ink)" 
+        }}>
+          Keep Your Streak Alive
+        </h2>
+        <p className="ex" style={{ marginBottom: 18, maxWidth: "48ch" }}>
+          Most people quit on day 3. Put money down — every completed day returns part of your stake.
+        </p>
+
+        {/* Active Plan Card */}
+        <div className="card sun" style={{ marginBottom: 16, position: "relative" }}>
+          <div className="badge g" style={{ position: "absolute", top: 16, right: 16 }}>Active</div>
+          <div className="eye" style={{ marginBottom: 4 }}>Your Journey</div>
+          <h3 style={{ 
+            fontFamily: "var(--dis)", 
+            fontWeight: 700, 
+            fontSize: 20, 
+            margin: "0 0 14px", 
+            color: "var(--ink)" 
+          }}>
+            {plan.id}-day {plan.name}
+          </h3>
+          
+          <div className="streak-growth" style={{ marginBottom: 16 }}>
+            <div className="plot" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(36px, 1fr))" }}>
+              {Array.from({ length: plan.id }, (_, k) => k + 1).map((d) => {
+                const done = days.includes(d);
+                const isToday = d === currentDay;
+                // Growth stages: seed(0) -> sprout(1-3) -> leaf(4-7) -> bloom(8+)
+                const stage = done ? (d <= 3 ? 1 : d <= 7 ? 2 : d <= 14 ? 3 : 4) : 0;
+                return (
+                  <button 
+                    key={d} 
+                    className="cell" 
+                    data-s={isToday ? "today" : done ? "done" : "open"}
+                    onClick={() => setDays((v) => (v.includes(d) ? v.filter((x) => x !== d) : [...v, d]))}
+                    aria-label={`Day ${d}${done ? ", done" : ""}`}
+                    style={{ opacity: done ? 1 : isToday ? 0.7 : 0.3 }}
+                  >
+                    <Plant reps={stage} size={28} />
+                    <span style={{ fontSize: 9 }}>{d}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          
+          <div className="streak-stats" style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: "var(--ink3)", marginBottom: 3 }}>Completed</div>
+              <div style={{ fontWeight: 800, fontSize: 18, color: "var(--good)" }}>
+                {days.length} / {plan.id}
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: "var(--ink3)", marginBottom: 3 }}>Earned Back</div>
+              <div style={{ fontWeight: 800, fontSize: 18, color: "var(--good)" }}>
+                ₹{earned}
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: "var(--ink3)", marginBottom: 3 }}>Net Cost</div>
+              <div style={{ fontWeight: 800, fontSize: 18, color: net === 0 ? "var(--good)" : "var(--warn)" }}>
+                ₹{net}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Future Plans - Lightweight */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {PLANS.filter((p) => p.id !== active).map((p) => (
+            <div 
+              key={p.id} 
+              className="plan" 
+              style={{ 
+                flex: "1 1 200px",
+                opacity: 0.6,
+                cursor: "pointer",
+                transition: "opacity 0.2s"
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = 0.9)}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = 0.6)}
+            >
+              <div className="eye" style={{ fontSize: 9 }}>{p.tag}</div>
+              <h4 style={{ fontSize: 16, margin: "4px 0 6px" }}>{p.id}-day {p.name}</h4>
+              <div style={{ fontSize: 12, color: "var(--ink3)", marginBottom: 8 }}>{p.blurb}</div>
+              <button 
+                className="btn sm leaf" 
+                style={{ width: "100%", padding: "8px 14px", fontSize: 12 }}
+                onClick={() => { setActive(p.id); setDays([]); }}
+              >
+                Switch to {p.id} days
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
-
 
 /* -------------------------------- KEY BAR -------------------------------- */
 
@@ -6602,10 +5907,10 @@ class Boundary extends React.Component {
 /* --------------------------------- SHELL --------------------------------- */
 
 const TABS = [
-  { id: "club", label: "Meeting", icon: "\u{1F3DD}\uFE0F", color: "#7EC8E3", glow: "126,200,227" },
-  { id: "topics", label: "Table Topics", icon: "\u{1F3B2}", color: "#FF9F7F", glow: "255,159,127" },
-  { id: "debate", label: "Debate", icon: "\u{1F525}", color: "#E8674A", glow: "232,103,74" },
-  { id: "vocab", label: "Vocabulary", icon: "\u{1F4DA}", color: "#7BAE8F", glow: "123,174,143" },
+  { id: "club", label: "Meeting" },
+  { id: "topics", label: "Table Topics" },
+  { id: "debate", label: "Debate" },
+  { id: "vocab", label: "Vocabulary" },
 ];
 
 export default function Yap() {
@@ -6632,7 +5937,6 @@ function YapApp() {
   const [intro, setIntro] = useState(() => !loadProfile().done);
   const wotd = useMemo(() => wordOfTheDay(lib.words), [lib.words]);
   const mic = useMic();
-  const [preselectedTopic, setPreselectedTopic] = useState(null);
 
   // stop any live stream when the tab changes, without capturing the whole hook
   const micStop = useRef(mic.stop); micStop.current = mic.stop;
@@ -6665,39 +5969,6 @@ function YapApp() {
 
   const stage = stageFor(stats.reps);
 
-  // Bottom nav hides on scroll down, reappears on scroll up
-  const [navHidden, setNavHidden] = useState(false);
-  useEffect(() => {
-    let last = window.scrollY;
-    let ticking = false;
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const y = window.scrollY;
-        const delta = y - last;
-        // ignore jitter, and always show when near the top or at the very bottom
-        if (Math.abs(delta) > 6) {
-          const atBottom = window.innerHeight + y >= document.documentElement.scrollHeight - 24;
-          setNavHidden(delta > 0 && y > 80 && !atBottom);
-          last = y;
-        }
-        ticking = false;
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // Detect if we're in recording mode (RecordingScreen sets window.__yapRecording when mounted)
-  const [isRecording, setIsRecording] = useState(false);
-  useEffect(() => {
-    const check = () => setIsRecording(!!window.__yapRecording);
-    const timer = setInterval(check, 100);
-    check();
-    return () => clearInterval(timer);
-  }, []);
-
   if (intro) {
     return (
       <div className="grdn">
@@ -6708,69 +5979,23 @@ function YapApp() {
   }
 
   return (
-    <div className="grdn relative" style={{ backgroundImage: `url(${isRecording ? "/images/home/voice-record-bg.png" : "/images/home/background.png"})`, backgroundSize: "cover", backgroundAttachment: "fixed", backgroundPosition: "top", minHeight: "100vh" }}>
+    <div className="grdn">
       <style>{CSS}</style><style>{ONB_CSS}</style><style>{DEBATE_CSS}</style>
-      {!isRecording && (
-      <header className="top" style={{ 
-        background: "rgba(255,255,255,0.65)", 
-        backdropFilter: "blur(14px)",
-        WebkitBackdropFilter: "blur(14px)",
-        borderRadius: "0", 
-        padding: "6px 0",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-        border: "none",
-        borderBottom: "1px solid var(--line)",
-        position: "relative",
-        width: "100%",
-        zIndex: "100"
-      }}>
-        <div style={{ 
-          width: "100%", 
-          padding: "0 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "16px"
-        }}>
-          <div className="mark" style={{ margin: 0, marginRight: "auto" }}>
-            <img src="/images/yap_logo.png" alt="Yap" className="yap-logo" style={{ height: '46px' }} />
+      <div className="wrap">
+        <header className="top">
+          <div className="mark">
+            <Mascot mood="logo" size={38} className="masc-bob" />
+            <span className="wordmark-text">Y<i>a</i>p</span>
           </div>
-          <div style={{ 
-            display: "flex", 
-            alignItems: "center", 
-            gap: "8px",
-            padding: "2px 14px 2px 10px"
-          }}>
+          <div className="pot">
             <Mascot mood={stats.reps >= 10 ? "cool" : stats.reps >= 3 ? "wave" : "curious"} size={26} />
             <div><b>{stats.reps}</b> <small>speeches</small></div>
           </div>
-          <div style={{ marginLeft: "auto" }}>
-            <AuthBar />
-          </div>
-        </div>
-      </header>
-      )}
-      <div className="wrap relative z-10" style={{ paddingTop: "24px" }}>
+          <AuthBar />
+        </header>
 
-
-        <div className="panel" key={tab} role="tabpanel" aria-label={(TABS.find((t) => t.id === tab) || {}).label}>
-        {tab === "club" && <Club days={days} setDays={setDays} active={active} setActive={setActive}
-          stats={stats} agenda={agenda} go={setTab} wotd={wotd} lib={lib}
-          profile={profile} replay={() => setIntro(true)} 
-          startWithRandomTopic={(topic) => { setPreselectedTopic(topic); setTab("topics"); }} />}
-        {tab === "debate" && <DebateMode mic={mic} onFinish={onFinish} lib={lib} profile={profile} />}
-        {tab === "topics" && <TableTopics mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} profile={profile} go={setTab} preselectedTopic={preselectedTopic} clearPreselected={() => setPreselectedTopic(null)} />}
-        {tab === "vocab" && <Vocabulary mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} />}
-        </div>
-
-        <p className="ex" style={{ textAlign: "center", padding: "22px 0 0" }}>
-          {stage.name} · {stats.reps} speech{stats.reps === 1 ? "" : "es"} on record
-        </p>
-      </div>
-      {!isRecording && (
-      <div className="navdock" data-hidden={navHidden ? "1" : "0"}>
         <nav className="nav" ref={navRef} role="tablist" aria-label="Meeting sections">
-          <div className="nav-slider" style={{ left: `${sliderStyle.left}px`, width: `${sliderStyle.width}px`, "--slide-c": (TABS.find((t) => t.id === tab) || TABS[0]).color, "--slide-g": (TABS.find((t) => t.id === tab) || TABS[0]).glow }} />
+          <div className="nav-slider" style={{ left: `${sliderStyle.left}px`, width: `${sliderStyle.width}px` }} />
           {TABS.map((t) => (
             <button 
               key={t.id} 
@@ -6781,13 +6006,26 @@ function YapApp() {
               data-on={tab === t.id ? "1" : "0"} 
               onClick={() => setTab(t.id)}
             >
-              <span className="tab-ico" aria-hidden="true">{t.icon}</span>
-              <span>{t.label}</span>
+              {t.label}
             </button>
           ))}
         </nav>
+
+        <LanguageBar mic={mic} />
+
+        <div className="panel" key={tab} role="tabpanel" aria-label={(TABS.find((t) => t.id === tab) || {}).label}>
+        {tab === "club" && <Club days={days} setDays={setDays} active={active} setActive={setActive}
+          stats={stats} agenda={agenda} go={setTab} wotd={wotd} lib={lib}
+          profile={profile} replay={() => setIntro(true)} />}
+        {tab === "debate" && <DebateMode mic={mic} onFinish={onFinish} lib={lib} profile={profile} />}
+        {tab === "topics" && <TableTopics mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} profile={profile} />}
+        {tab === "vocab" && <Vocabulary mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} />}
+        </div>
+
+        <p className="ex" style={{ textAlign: "center", padding: "22px 0 0" }}>
+          {stage.name} · {stats.reps} speech{stats.reps === 1 ? "" : "es"} on record
+        </p>
       </div>
-      )}
     </div>
   );
 }

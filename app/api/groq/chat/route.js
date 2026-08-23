@@ -4,6 +4,10 @@ import { NextResponse } from "next/server";
 // strict "return only raw JSON" system prompts this app relies on everywhere.
 const GROQ_CHAT_MODEL = "llama-3.3-70b-versatile";
 
+// Callers may request a faster model, but only from this list — the body comes
+// from the browser, so an arbitrary model string must never reach Groq.
+const ALLOWED_MODELS = new Set([GROQ_CHAT_MODEL, "llama-3.1-8b-instant"]);
+
 /* Every caller on the client (askClaude) sends { system, user, max_tokens }
  * and expects back a JSON object it can hand straight to JSON.parse. Keeping
  * the key here, server-side, means the browser never sees it. */
@@ -20,7 +24,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const { system, user, max_tokens: maxTokens } = body || {};
+  const { system, user, max_tokens: maxTokens, model } = body || {};
   if (!user) {
     return NextResponse.json({ error: "missing 'user' field" }, { status: 400 });
   }
@@ -31,7 +35,7 @@ export async function POST(request) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: GROQ_CHAT_MODEL,
+        model: ALLOWED_MODELS.has(model) ? model : GROQ_CHAT_MODEL,
         max_tokens: maxTokens || 900,
         temperature: 0.7,
         response_format: { type: "json_object" },

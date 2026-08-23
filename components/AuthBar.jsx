@@ -1,9 +1,11 @@
 "use client";
 
 import { useAuth } from "@/lib/supabase/useAuth";
+import { useRouter } from "next/navigation";
 
 export function AuthBar() {
-  const { user, profile, loading, signInWithGoogle, signOut } = useAuth();
+  const { user, profile, loading, signInWithGoogle } = useAuth();
+  const router = useRouter();
 
   if (loading) return null;
 
@@ -16,19 +18,54 @@ export function AuthBar() {
   }
 
   return (
-    <div className="pot" style={{ gap: 10 }}>
-      <div>
-        <b>{profile?.streak ?? 0}</b> <small>streak</small>
-      </div>
-      {profile?.plan === "paid" && <small style={{ color: "var(--ink60)" }}>PRO</small>}
-      <button
-        type="button"
-        onClick={signOut}
-        title={user.email}
-        style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--ink60)", padding: 0 }}
+    <button
+      type="button"
+      onClick={() => router.push("/profile")}
+      title={user.email}
+      style={{ 
+        cursor: "pointer", 
+        border: "2.5px solid var(--line)",
+        background: "white",
+        position: "relative",
+        borderRadius: "50%",
+        width: "44px",
+        height: "44px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "0"
+      }}
+    >
+      {/* Profile Icon */}
+      <svg 
+        width="24" 
+        height="24" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round"
+        style={{ color: "var(--ink)" }}
       >
-        Sign out
-      </button>
-    </div>
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+      {profile?.plan === "paid" && (
+        <span style={{ 
+          position: "absolute", 
+          top: "-5px", 
+          right: "-5px", 
+          background: "var(--ink)", 
+          color: "white", 
+          fontSize: "9px", 
+          fontWeight: "bold", 
+          padding: "2px 4px", 
+          borderRadius: "4px" 
+        }}>
+          PRO
+        </span>
+      )}
+    </button>
   );
 }
