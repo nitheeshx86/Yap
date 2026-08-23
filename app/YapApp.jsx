@@ -59,14 +59,17 @@ const CSS = `
 .streak-growth{padding:16px;background:var(--surf2);border-radius:18px}
 .streak-stats>div{transition:transform .25s}
 .streak-stats>div:hover{transform:translateY(-2px)}
-.flow.compact{margin:0 0 20px}
-.flow.compact i{flex:1;text-align:center;padding:9px 6px}
 .taskrow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px dashed var(--line)}
 .taskrow:last-child{border-bottom:none}
 .taskbox{flex:0 0 28px;height:28px;border-radius:10px;border:1px solid var(--line);display:grid;place-items:center;font-family:var(--bod);font-weight:700;font-size:12px;background:var(--sand);color:var(--ink3)}
 .taskrow[data-done="1"] .taskbox{background:var(--good);border-color:var(--good);color:#fff}
 .taskrow b{font-size:14.5px;color:var(--ink2);font-weight:600}
 .taskrow[data-done="1"] b{color:var(--ink3);text-decoration:line-through;text-decoration-color:var(--line)}
+/* the wotd badge sits at the card's top-right, so the row it shares needs to
+   start left of it and never run underneath */
+.wcard-top{display:flex;justify-content:flex-end;margin:-4px 0 10px;position:relative;z-index:4}
+.card.sun .wcard-top{padding-right:96px}
+@media (max-width:420px){.card.sun .wcard-top{padding-right:0;margin-top:6px}}
 .ghostlink{background:none;border:none;color:var(--ink3);font-family:var(--bod);font-weight:600;font-size:13px;cursor:pointer;padding:8px 4px;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
 .ghostlink:hover{color:var(--ink2)}
 .seg2{display:flex;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surf1)}
@@ -252,10 +255,13 @@ const CSS = `
 @keyframes sway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
 /* VOCABULARY: a card you actually flip over */
 .flip{perspective:1100px;cursor:pointer}
-.flip-in{position:relative;min-height:158px;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.3,.9,.35,1)}
+/* grid-stacking both faces means the taller one sets the height, so a long
+   definition grows the card instead of overflowing a fixed 158px box */
+.flip-in{display:grid;min-height:158px;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.3,.9,.35,1)}
+.flip-face,.flip-back{grid-area:1/1}
 .flip[data-flip="1"] .flip-in{transform:rotateY(180deg)}
 .flip-face,.flip-back{backface-visibility:hidden;-webkit-backface-visibility:hidden}
-.flip-back{position:absolute;inset:0;transform:rotateY(180deg);-webkit-transform:rotateY(180deg);display:flex;flex-direction:column;justify-content:center;overflow:auto;opacity:0;transition:opacity .18s .3s}
+.flip-back{transform:rotateY(180deg);-webkit-transform:rotateY(180deg);display:flex;flex-direction:column;justify-content:center;opacity:0;transition:opacity .18s .3s}
 .flip-face{transform:rotateY(0deg);-webkit-transform:rotateY(0deg);opacity:1;transition:opacity .18s .3s}
 .flip[data-flip="1"] .flip-face{opacity:0}
 .flip[data-flip="1"] .flip-back{opacity:1}
@@ -2024,9 +2030,12 @@ async function groqTranscribe(blob) {
 const GROQ_FAST_MODEL = "llama-3.1-8b-instant";
 
 async function groqChat(system, user, maxTokens = 900, model) {
+  // never let a stalled request hang the UI forever — the caller has an
+  // offline fallback that is better than an indefinite spinner
   const res = await fetch("/api/groq/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ system, user, max_tokens: maxTokens, model }),
+    signal: AbortSignal.timeout(25000),
   });
   if (!res.ok) throw new Error("groq chat " + res.status);
   const j = await res.json();
@@ -2322,9 +2331,13 @@ function preferSarvamWriter() {
    no browser-held key and no user-configured proxy. Sarvam goes first for
    non-English replies because it is native to Indian languages; Groq is the
    default and the fallback. */
+/* `fastModel` also implies "speed matters": it skips Sarvam entirely. Sarvam is
+   the better writer for Indian languages, but sarvam-105b is a reasoning model
+   that thinks for thousands of hidden tokens before writing a word, which is
+   the wrong trade for anything a student is waiting on. */
 async function askClaude(system, user, maxTokens = 900, spoken, fastModel) {
   const sys = system + languageDirective(spoken || spokenLangCode());
-  if (preferSarvamWriter()) {
+  if (!fastModel && preferSarvamWriter()) {
     try {
       return await sarvamChat(sys, user, maxTokens);
     } catch (e) { /* fall through to Groq rather than losing the feature */ }
@@ -2412,6 +2425,7 @@ function useMic() {
   const session = useRef(0);
   const fin = useRef(""), want = useRef(false), voiced = useRef(0);
   const restarts = useRef(0), lastRestart = useRef(0);
+  const totalRestarts = useRef(0), restartTimer = useRef(null);
   const confidences = useRef([]);
   const floor = useRef(0.02), calibrating = useRef(true);
   const levelRef = useRef(new Array(22).fill(0));
@@ -2429,6 +2443,8 @@ function useMic() {
   const stop = useCallback(() => {
     want.current = false;
     setListening(false); setSpeaking(false);
+    // kill any queued restart so a stopped session can't re-open the mic
+    if (restartTimer.current) { clearTimeout(restartTimer.current); restartTimer.current = null; }
     /* detach handlers before stopping: an in-flight instance whose events fire
        after teardown must never write into the refs a new session reuses —
        that's how two overlapping recognisers used to corrupt a transcript */
@@ -2492,7 +2508,8 @@ function useMic() {
     fin.current = ""; finalTextRef.current = ""; setFinalText(""); setInterim("");
     // a previous take's multilingual result must never be scored on this one
     sarvamRef.current = null; sarvamPendingRef.current = false; setSarvam(null);
-    voiced.current = 0; restarts.current = 0; confidences.current = [];
+    voiced.current = 0; restarts.current = 0; totalRestarts.current = 0; confidences.current = [];
+    if (restartTimer.current) { clearTimeout(restartTimer.current); restartTimer.current = null; }
     chunks.current = []; hardStop.current = false;
     calibrating.current = true; floor.current = 0.02;
     setClip(null);
@@ -2693,17 +2710,30 @@ function useMic() {
       /* "no-speech", "aborted" and "network" are normal; they must not surface as errors */
     };
 
+    /* Web Speech ends the session constantly — on every pause, and on a timer
+       even mid-sentence. Each restart makes the browser re-acquire the mic,
+       which on some platforms flashes the recording indicator and audibly
+       interrupts. So: restart, but never in a way the user can feel.
+         - the healthy-stretch reset is generous, so a long session doesn't
+           accumulate its way into the cap
+         - the total budget is bounded per session, not per stretch
+         - the tape (MediaRecorder) is untouched by any of this: it keeps
+           running, so nothing is ever lost when live captions give up */
     r.onend = () => {
       if (!want.current || hardStop.current) return;
       const now = Date.now();
-      if (now - lastRestart.current > 10000) restarts.current = 0;   // healthy stretch, reset
-      if (restarts.current >= 8) {
-        setNotice("Live transcription keeps dropping out. The recording is still running.");
+      // only a genuinely long clean stretch clears the counter
+      if (now - lastRestart.current > 60000) restarts.current = 0;
+      totalRestarts.current += 1;
+      if (restarts.current >= 8 || totalRestarts.current >= 40) {
+        setNotice("Live captions have stopped, but your recording is still running and will be transcribed in full at the end.");
         return;
       }
-      const delay = Math.min(2000, 120 * Math.pow(2, restarts.current));   // backoff, no tight loop
+      // a floor of ~400ms keeps consecutive re-acquisitions from stacking up
+      const delay = Math.min(3000, 400 * Math.pow(1.7, restarts.current));
       restarts.current += 1; lastRestart.current = now;
-      setTimeout(() => {
+      if (restartTimer.current) clearTimeout(restartTimer.current);
+      restartTimer.current = setTimeout(() => {
         if (!want.current || hardStop.current) return;
         try { r.start(); } catch (e) { /* already starting */ }
       }, delay);
@@ -3192,6 +3222,9 @@ function CardDeck({ cards, introCaption, onIndex }) {
   const [sparkles, setSparkles] = useState([]);
   const draggingRef = useRef(false);
   const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const axisRef = useRef(null);
+  const pointerIdRef = useRef(null);
   const reducedRef = useRef(false);
 
   useEffect(() => {
@@ -3214,18 +3247,37 @@ function CardDeck({ cards, introCaption, onIndex }) {
     if (e.target.closest && e.target.closest("button, a, input, textarea, select, audio")) return;
     draggingRef.current = true;
     startXRef.current = e.clientX;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* not critical */ }
+    startYRef.current = e.clientY;
+    axisRef.current = null;              // undecided until the gesture commits
+    // capture is deferred until we know this is a horizontal swipe, otherwise
+    // it swallows the vertical scroll the user actually wanted
+    pointerIdRef.current = e.pointerId;
   };
   const onPointerMove = (e) => {
     if (!draggingRef.current) return;
-    setDragX(e.clientX - startXRef.current);
+    const dx = e.clientX - startXRef.current;
+    const dy = e.clientY - startYRef.current;
+
+    /* Decide the axis once, on the first meaningful movement: a mostly-vertical
+       gesture is a scroll and must be left alone, not turned into a card swipe. */
+    if (axisRef.current === null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;    // too small to tell yet
+      axisRef.current = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
+      if (axisRef.current === "y") { draggingRef.current = false; return; }
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* not critical */ }
+    }
+    if (axisRef.current !== "x") return;
+    setDragX(dx);
   };
   /* Release always lands back at dragX 0 in the same tick the index moves, so
      the card can never be left parked offscreen by a dropped pointer event. */
   const endDrag = (e) => {
-    if (!draggingRef.current) return;
+    if (!draggingRef.current) { setDragX(0); axisRef.current = null; return; }
     draggingRef.current = false;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) { /* not critical */ }
+    const wasX = axisRef.current === "x";
+    axisRef.current = null;
+    if (!wasX) { setDragX(0); return; }        // a scroll, not a swipe
     const dx = e.clientX - startXRef.current;
     const THRESH = 70;
     if (dx <= -THRESH && index < cards.length - 1) {
@@ -3268,6 +3320,8 @@ function CardDeck({ cards, introCaption, onIndex }) {
                 opacity: isTop ? 1 : 1 - offset * 0.1,
                 transition: dragging || reducedRef.current ? "none" : "transform .32s cubic-bezier(.22,1,.36,1), opacity .3s",
                 pointerEvents: isTop ? "auto" : "none",
+                // let the browser own vertical scrolling; we only claim pan-x
+                touchAction: "pan-y",
               }}
               onPointerDown={isTop ? onPointerDown : undefined}
               onPointerMove={isTop ? onPointerMove : undefined}
@@ -3640,9 +3694,116 @@ function SummaryCard({ r, topic, onNewTopic, onHome }) {
     say("Saved to this device ✓");
   };
 
+  /* Draws the score card to a canvas so there is an actual image to share.
+     Everything is drawn by hand rather than rasterising the DOM: no external
+     library, and no tainted-canvas problem from the background image. */
+  const drawScoreCard = () => {
+    const W = 1080, H = 1350, s = 2;              // s: supersample, then scale down
+    const c = document.createElement("canvas");
+    c.width = W * s; c.height = H * s;
+    const x = c.getContext("2d");
+    if (!x) return null;
+    x.scale(s, s);
+
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#EAF8FB"); g.addColorStop(0.45, "#D6F0F6"); g.addColorStop(1, "#F8F2E7");
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+
+    const centre = (t, y, font, fill) => {
+      x.font = font; x.fillStyle = fill; x.textAlign = "center";
+      x.fillText(t, W / 2, y);
+    };
+
+    centre("YAP", 130, "800 46px Manrope, system-ui, sans-serif", "#7A939A");
+    centre("SPEAK · THINK · GROW", 172, "700 20px Manrope, system-ui, sans-serif", "#7A939A");
+
+    // score dial
+    const cx = W / 2, cy = 430, rad = 150;
+    x.lineWidth = 26; x.lineCap = "round";
+    x.beginPath(); x.arc(cx, cy, rad, Math.PI * 0.75, Math.PI * 2.25); x.strokeStyle = "rgba(31,79,91,.12)"; x.stroke();
+    const frac = Math.max(0, Math.min(1, (r.overall || 0) / 100));
+    x.beginPath(); x.arc(cx, cy, rad, Math.PI * 0.75, Math.PI * 0.75 + Math.PI * 1.5 * frac);
+    x.strokeStyle = "#7EC8E3"; x.stroke();
+    centre(String(r.overall), cy + 34, "800 128px Manrope, system-ui, sans-serif", "#1F4F5B");
+    centre("OUT OF 100", cy + 78, "700 20px Manrope, system-ui, sans-serif", "#7A939A");
+
+    // topic, wrapped
+    let y = 700;
+    if (topic) {
+      x.font = "600 34px Manrope, system-ui, sans-serif"; x.fillStyle = "#45636B"; x.textAlign = "center";
+      const words = String(topic).split(/\s+/);
+      let line = "";
+      const lines = [];
+      for (const w of words) {
+        const t = line ? line + " " + w : w;
+        if (x.measureText(t).width > W - 200 && line) { lines.push(line); line = w; } else line = t;
+      }
+      if (line) lines.push(line);
+      for (const l of lines.slice(0, 3)) { x.fillText("\u201C" + l + "\u201D", W / 2, y); y += 46; }
+      y += 24;
+    }
+
+    // metric grid
+    const metrics = [
+      ["Structure", r.structure], ["Flow", r.fluency], ["Pace", r.pace],
+      ["Range", r.range], ["Grammar", r.accuracy], ["Clarity", r.clarity100],
+    ];
+    const cols = 3, cw = (W - 160) / cols, ch = 130;
+    metrics.forEach((m, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const bx = 80 + col * cw, by = y + row * (ch + 16);
+      x.fillStyle = "rgba(255,255,255,.72)";
+      const rr = 26;
+      x.beginPath();
+      x.moveTo(bx + rr, by); x.arcTo(bx + cw - 12, by, bx + cw - 12, by + ch, rr);
+      x.arcTo(bx + cw - 12, by + ch, bx, by + ch, rr); x.arcTo(bx, by + ch, bx, by, rr);
+      x.arcTo(bx, by, bx + cw - 12, by, rr); x.closePath(); x.fill();
+      x.textAlign = "center";
+      x.font = "800 44px Manrope, system-ui, sans-serif"; x.fillStyle = "#1F4F5B";
+      x.fillText(String(m[1] ?? "-"), bx + (cw - 12) / 2, by + 66);
+      x.font = "700 19px Manrope, system-ui, sans-serif"; x.fillStyle = "#7A939A";
+      x.fillText(String(m[0]).toUpperCase(), bx + (cw - 12) / 2, by + 100);
+    });
+    y += 2 * (ch + 16) + 40;
+
+    centre(`${r.wpm} wpm  ·  ${r.fillerCount} filler${r.fillerCount === 1 ? "" : "s"}  ·  ${r.variety}% word variety`,
+      y + 10, "600 28px Manrope, system-ui, sans-serif", "#45636B");
+    centre(band && band.label ? band.label : "", y + 70, "800 34px Manrope, system-ui, sans-serif", "#5FAECB");
+
+    return c;
+  };
+
+  const canvasToBlob = (c) => new Promise((resolve) => {
+    try { c.toBlob((b) => resolve(b), "image/png"); } catch (e) { resolve(null); }
+  });
+
   const share = async () => {
+    let file = null;
     try {
+      const c = drawScoreCard();
+      const blob = c ? await canvasToBlob(c) : null;
+      if (blob) file = new File([blob], "yap-score.png", { type: "image/png" });
+    } catch (e) { /* fall back to text-only below */ }
+
+    try {
+      // canShare({files}) is the only reliable test: some browsers expose
+      // navigator.share but reject any payload carrying a file
+      if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: "My Yap score", text: summaryText, files: [file] });
+        return;
+      }
       if (navigator.share) { await navigator.share({ title: "My Yap score", text: summaryText }); return; }
+      // no share sheet: hand them the image as a download, plus the text
+      if (file) {
+        const url = URL.createObjectURL(file);
+        const a = document.createElement("a");
+        a.href = url; a.download = "yap-score.png";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        try { await navigator.clipboard.writeText(summaryText); } catch (e) { /* image is the point */ }
+        say("Image saved — text copied too ✓");
+        return;
+      }
       await navigator.clipboard.writeText(summaryText);
       say("Copied — paste it anywhere ✓");
     } catch (e) {
@@ -4069,9 +4230,9 @@ function ClarityCard({ r }) {
 
 const STANCES = [
   { id: "for", label: "FOR", blurb: "Argue the motion. Make the strongest case you can.",
-    verb: "supporting", colour: "var(--ocean-deep)" },
+    verb: "supporting", colour: "var(--ocean-deep)", accent: "#3E9BD1", glow: "62,155,209" },
   { id: "against", label: "AGAINST", blurb: "Oppose the motion. Attack its weakest joint.",
-    verb: "opposing", colour: "var(--coral-deep)" },
+    verb: "opposing", colour: "var(--coral-deep)", accent: "#E8674A", glow: "232,103,74" },
 ];
 const stanceById = (id) => STANCES.find((x) => x.id === id) || STANCES[0];
 
@@ -4099,6 +4260,170 @@ const countRe = (t, re) => (t.match(new RegExp(re.source, re.flags)) || []).leng
 
 /* Did they hold the line they picked? Not a style question — a debate is
    scored on whether your case survives your own speech. */
+/* Full-screen celebration when points land. Mounts on an xp award, plays once,
+   and unmounts itself — the caller only has to hand it a number. */
+function PointsBurst({ amount, onDone }) {
+  const doneRef = useRef(onDone); doneRef.current = onDone;
+  useEffect(() => {
+    const t = setTimeout(() => doneRef.current && doneRef.current(), 2100);
+    return () => clearTimeout(t);
+  }, [amount]);
+
+  // fixed ring of stars, so every burst reads the same rather than randomly
+  const stars = [
+    { x: -128, y: -54, s: 1.0, d: 0 },    { x: 122, y: -70, s: .78, d: .06 },
+    { x: -92, y: 66, s: .66, d: .12 },    { x: 104, y: 58, s: .92, d: .04 },
+    { x: -160, y: 14, s: .58, d: .16 },   { x: 156, y: 2, s: .70, d: .1 },
+    { x: -44, y: -104, s: .74, d: .14 },  { x: 52, y: 100, s: .62, d: .18 },
+  ];
+
+  return (
+    <div className="pburst" role="status" aria-live="polite">
+      <style>{PBURST_CSS}</style>
+      <div className="pburst-glow" />
+      <div className="pburst-core">
+        {stars.map((st, i) => (
+          <span key={i} className="pburst-star"
+            style={{ "--px": `${st.x}px`, "--py": `${st.y}px`, "--ps": st.s, animationDelay: `${st.d}s` }}>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 1.6l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 16.8 5.9 20.2l1.4-6.8L2.2 8.7l6.9-.8L12 1.6Z" />
+            </svg>
+          </span>
+        ))}
+        <div className="pburst-num">
+          <b>+{amount}</b>
+          <span>points</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PBURST_CSS = `
+.pburst{position:fixed;inset:0;z-index:900;display:grid;place-items:center;pointer-events:none;
+  animation:pbFade .3s ease both}
+.pburst-glow{position:absolute;width:min(78vw,420px);aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.92),rgba(238,219,184,.55) 42%,transparent 70%);
+  animation:pbGlow 2.1s cubic-bezier(.2,.9,.3,1) both}
+.pburst-core{position:relative;display:grid;place-items:center;animation:pbPop .7s cubic-bezier(.2,1.5,.4,1) both}
+.pburst-num{position:relative;z-index:2;text-align:center;animation:pbLift 2.1s cubic-bezier(.2,.9,.3,1) both}
+.pburst-num b{display:block;font-family:var(--dis),system-ui,sans-serif;font-weight:800;
+  font-size:clamp(64px,19vw,116px);line-height:.9;letter-spacing:-.03em;color:#1F4F5B;
+  text-shadow:0 6px 0 rgba(255,255,255,.9),0 10px 26px rgba(31,79,91,.28)}
+.pburst-num span{display:block;margin-top:6px;font-family:var(--bod),system-ui,sans-serif;font-weight:800;
+  font-size:clamp(13px,3.4vw,17px);letter-spacing:.24em;text-transform:uppercase;color:#45636B;
+  text-shadow:0 2px 6px rgba(255,255,255,.9)}
+.pburst-star{position:absolute;color:#F2B33D;filter:drop-shadow(0 4px 10px rgba(201,154,75,.5));
+  animation:pbStar 1.5s cubic-bezier(.2,.9,.3,1) both}
+.pburst-star svg{width:38px;height:38px;display:block}
+@keyframes pbFade{from{opacity:0}to{opacity:1}}
+@keyframes pbPop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.06);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes pbGlow{0%{transform:scale(.4);opacity:0}25%{opacity:1}100%{transform:scale(1.25);opacity:0}}
+@keyframes pbLift{0%,72%{transform:translateY(0);opacity:1}100%{transform:translateY(-26px);opacity:0}}
+@keyframes pbStar{
+  0%{transform:translate(0,0) scale(0) rotate(-60deg);opacity:0}
+  35%{opacity:1}
+  70%{transform:translate(var(--px),var(--py)) scale(var(--ps)) rotate(10deg);opacity:1}
+  100%{transform:translate(calc(var(--px) * 1.18),calc(var(--py) * 1.18 + 16px)) scale(calc(var(--ps) * .82)) rotate(24deg);opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .pburst-glow,.pburst-star{animation-duration:.01s;animation-iteration-count:1}
+  .pburst-core,.pburst-num{animation:pbFade .2s ease both}
+}
+`;
+
+function ThumbIcon({ down }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+      style={down ? { transform: "rotate(180deg)" } : undefined}>
+      <path d="M9 21h8.3a2 2 0 0 0 2-1.7l1.3-8a2 2 0 0 0-2-2.3H14V4.6A2.6 2.6 0 0 0 11.4 2c-.5 0-.9.3-1 .8L9 9v12Zm-5 0h2a1 1 0 0 0 1-1V10a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1Z" />
+    </svg>
+  );
+}
+
+function WaveRule() {
+  return (
+    <svg viewBox="0 0 24 12" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" aria-hidden="true">
+      <path d="M1 8c3-5 6-5 9 0s6 5 9 0" />
+    </svg>
+  );
+}
+
+function BirdsMark() {
+  return (
+    <svg viewBox="0 0 60 24" fill="none" stroke="currentColor" strokeWidth="1.6"
+      strokeLinecap="round" className="sc-birds" aria-hidden="true">
+      <path d="M4 9c3-4 6-4 9 0" /><path d="M22 5c2.5-3.5 5-3.5 7.5 0" />
+      <path d="M38 13c3-4 6-4 9 0" />
+    </svg>
+  );
+}
+
+/* The card's shape, drawn as SVG so it can have rounded corners AND a gradient
+   stroke that follows the slope — clip-path gives neither. Both the top and
+   bottom edges slant, mirrored between the two sides, and the path is built
+   from a viewBox that stretches to the card via preserveAspectRatio="none".
+   Stroke width is corrected for that non-uniform scale via vector-effect. */
+function StanceFrame({ id, accent, flip, on }) {
+  const W = 200, H = 150, R = 16;          // R: corner radius, in viewBox units
+  const slant = 17;                        // horizontal inset of the short edge
+  /* One vertical edge is full height; the opposite one is pulled in at both
+     top and bottom, so the card tapers sideways. AGAINST is short down its
+     LEFT edge, FOR mirrors it. Corners run clockwise from top-left. */
+  const pts = flip
+    // short RIGHT edge (FOR)
+    ? [[0, 0], [W - slant, slant], [W - slant, H - slant], [0, H]]
+    // short LEFT edge (AGAINST)
+    : [[slant, slant], [W, 0], [W, H], [slant, H - slant]];
+
+  // round every corner by trimming R along each adjoining edge
+  const d = pts.map((p, i) => {
+    const prev = pts[(i + pts.length - 1) % pts.length];
+    const next = pts[(i + 1) % pts.length];
+    const trim = (from, to) => {
+      const dx = to[0] - from[0], dy = to[1] - from[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const t = Math.min(R, len / 2) / len;
+      return [from[0] + dx * t, from[1] + dy * t];
+    };
+    const a = trim(p, prev), b = trim(p, next);
+    return { a, b };
+  }).map((c, i) => (i === 0
+    ? `M ${c.a[0]} ${c.a[1]} Q ${pts[0][0]} ${pts[0][1]} ${c.b[0]} ${c.b[1]}`
+    : `L ${c.a[0]} ${c.a[1]} Q ${pts[i][0]} ${pts[i][1]} ${c.b[0]} ${c.b[1]}`)).join(" ") + " Z";
+
+  return (
+    <svg className="sc-frame" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        {/* the face: white, warming to the accent at the far corner */}
+        <linearGradient id={`f${id}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#ffffff" />
+          <stop offset=".5" stopColor="#fdfeff" />
+          <stop offset="1" stopColor={accent} stopOpacity={on ? ".2" : ".1"} />
+        </linearGradient>
+        {/* the border: a sheen that travels the whole outline, so the edge
+            reads as reflective rather than a flat rule */}
+        <linearGradient id={`s${id}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#ffffff" stopOpacity=".95" />
+          <stop offset=".22" stopColor={accent} stopOpacity={on ? "1" : ".55"} />
+          <stop offset=".5" stopColor="#ffffff" stopOpacity=".9" />
+          <stop offset=".78" stopColor={accent} stopOpacity={on ? "1" : ".55"} />
+          <stop offset="1" stopColor="#ffffff" stopOpacity=".95" />
+        </linearGradient>
+        {/* a soft inner highlight along the top edge */}
+        <linearGradient id={`g${id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ffffff" stopOpacity=".85" />
+          <stop offset=".35" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={d} fill={`url(#f${id})`} />
+      <path d={d} fill={`url(#g${id})`} />
+      <path d={d} fill="none" stroke={`url(#s${id})`}
+        strokeWidth={on ? 2.5 : 1.6} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 function stanceConsistency(text, stance, base) {
   const t = " " + (text || "").toLowerCase() + " ";
   const f = countRe(t, FOR_MARKERS);
@@ -4234,6 +4559,15 @@ function localBrief(topic, stance) {
   };
 }
 
+function Chevron() {
+  return (
+    <svg className="bchev" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
 /* The model returns each counter as one string holding both the objection and
    its answer. Split on the first sentence boundary so the rebuttal can be shown
    under its own heading; if there is only one sentence, it stays whole. */
@@ -4264,22 +4598,68 @@ Judge the case, never the position — a well-argued side you disagree with scor
 /* ------------------------------ DEBATE UI --------------------------------- */
 
 const DEBATE_CSS = `
-.stance{display:flex;gap:10px;flex-wrap:wrap}
-.stancecard{flex:1 1 150px;border:1px solid var(--line);background:var(--surf1);border-radius:20px;
-  padding:17px 15px;cursor:pointer;text-align:left;transition:.2s cubic-bezier(.2,.9,.3,1);
-  font-family:var(--bod);color:var(--ink)}
-.stancecard:hover{transform:translateY(-2px)}
-.stancecard b{display:block;font-family:var(--dis);font-weight:700;font-size:21px;letter-spacing:-.01em;margin-bottom:4px}
-.stancecard span{font-size:13px;color:var(--ink2);line-height:1.5}
-.stancecard[data-on="1"]{border-color:currentColor;background:var(--surf2);box-shadow:0 10px 26px rgba(31,79,91,.1)}
-.stancecard[data-on="1"] span{color:inherit;opacity:.8}
-.flow{display:flex;align-items:center;margin:0 0 18px}
-.flow i{flex:0 0 auto;font-style:normal;font-family:var(--bod);font-weight:700;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--ink3);border:1px solid var(--line);border-radius:999px;padding:6px 12px;white-space:nowrap;background:var(--surf1);transition:.25s cubic-bezier(.2,.9,.3,1)}
-.flow i[data-on="1"]{background:var(--ocean);border-color:var(--ocean);color:#fff;font-size:10.5px;padding:7px 14px;box-shadow:0 6px 14px rgba(126,200,227,.3)}
-.flow i[data-done="1"]{border-color:var(--good);color:var(--good)}
-.flow em{flex:1 1 16px;min-width:10px;height:1px;background:var(--line);margin:0 5px;font-size:0}
-.flow em[data-done="1"]{background:var(--good)}
+/* ---- choose your side ---- */
+.side-head{display:flex;align-items:center;gap:12px;justify-content:center;margin:2px 0 16px}
+.side-head span{font-family:var(--bod);font-weight:800;font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink2);white-space:nowrap}
+.side-head i{height:2px;flex:1;max-width:70px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(126,200,227,.85))}
+.side-head i:last-child{background:linear-gradient(90deg,rgba(126,200,227,.85),transparent)}
+
+/* The tapered edges already open a wedge between the cards, so the grid gap is
+   pulled in tight — with a positive gap the two read as far apart. */
+.stance{display:grid;grid-template-columns:1fr 1fr;gap:0;align-items:stretch;margin:0 -2px}
+.stance > :first-child{margin-right:-30px}
+@media (max-width:430px){
+  .stance{grid-template-columns:1fr;gap:8px;margin:0}
+  .stance > :first-child{margin-right:0}
+}
+
+/* The shape, border and fill are all drawn by <StanceFrame> (SVG), because a
+   clip-path can carry neither a rounded corner nor a stroke. The button is a
+   transparent box; the SVG stretches behind the content. Both the top and the
+   bottom edge slant, mirrored between the two sides. */
+.stancecard{position:relative;display:block;width:100%;text-align:left;
+  border:none;background:none;padding:20px 20px 22px;min-height:180px;
+  cursor:pointer;transition:transform .28s cubic-bezier(.2,.9,.3,1),filter .28s;
+  filter:drop-shadow(0 12px 26px rgba(var(--sc-glow),.20))}
+.sc-frame{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.stancecard:hover{transform:translateY(-3px);filter:drop-shadow(0 18px 36px rgba(var(--sc-glow),.30))}
+.stancecard[data-on="1"]{filter:drop-shadow(0 0 20px rgba(var(--sc-glow),.42)) drop-shadow(0 16px 34px rgba(var(--sc-glow),.30))}
+.stancecard:focus-visible{outline:none}
+.stancecard:focus-visible .sc-frame{outline:3px solid var(--sc-accent);outline-offset:4px;border-radius:18px}
+@media (prefers-reduced-motion:reduce){.stancecard{transition:none}}
+
+.sc-badge{position:absolute;top:16px;left:18px;z-index:4;width:34px;height:34px;border-radius:50%;
+  display:grid;place-items:center;color:#fff;
+  background:radial-gradient(circle at 32% 28%,rgba(255,255,255,.55),transparent 58%),var(--sc-accent);
+  box-shadow:0 4px 10px rgba(var(--sc-glow),.5),inset 0 -2px 4px rgba(0,0,0,.18)}
+.sc-badge svg{width:17px;height:17px}
+
+.sc-copy{display:block;position:relative;z-index:2;padding-top:30px}
+/* The tapered vertical edge eats into the card, so the copy is pushed clear of
+   it: FOR tapers on the right, AGAINST on the left. The straight edge keeps a
+   normal 20px, the tapered one needs room for the widest part of the wedge. */
+/* FOR's straight edge is on the right, so its content aligns there — against
+   the solid edge rather than floating over the tapered one */
+.stancecard[data-side="for"]{padding-right:30px;text-align:right}
+.stancecard[data-side="against"]{padding-left:40px}
+.stancecard[data-side="against"] .sc-badge{left:auto;right:18px}
+@media (max-width:430px){
+  .stancecard[data-side="for"]{padding-right:34px}
+  .stancecard[data-side="against"]{padding-left:34px}
+}
+.sc-label{display:block;font-family:var(--dis);font-weight:800;font-size:clamp(23px,5.8vw,31px);
+  line-height:1;letter-spacing:-.01em;color:var(--sc-accent);margin-bottom:11px}
+/* the little wave-on-a-rule divider */
+.sc-rule{display:flex;align-items:center;gap:5px;margin-bottom:13px}
+.sc-rule i{height:1.5px;flex:1;background:rgba(var(--sc-glow),.42);border-radius:2px}
+.sc-rule svg{width:16px;height:8px;flex:none;color:var(--sc-accent);opacity:.75}
+.sc-blurb{display:block;font-size:12.5px;line-height:1.68;color:var(--ink2)}
+
+/* the board sits bottom-right, bleeding off the card edge */
+/* faint birds, as in the reference */
+/* birds sit opposite the badge: FOR's badge is left, AGAINST's is right */
+.sc-birds{position:absolute;top:16px;right:16px;width:44px;color:var(--sc-accent);opacity:.26;z-index:2}
+.stancecard[data-side="against"] .sc-birds{right:auto;left:16px}
 .prepgrid{display:flex;gap:8px;flex-wrap:wrap}
 .preptile{flex:1 1 90px;border:1px solid var(--line);background:var(--surf1);border-radius:16px;
   padding:12px 8px;cursor:pointer;text-align:center;font-family:var(--bod);color:var(--ink);transition:.2s cubic-bezier(.2,.9,.3,1)}
@@ -4310,54 +4690,54 @@ const DEBATE_CSS = `
 .bsheet{background:#fff;border:1px solid var(--line);border-radius:26px;padding:24px 22px;margin-bottom:20px;box-shadow:0 18px 44px rgba(31,79,91,.12);animation:cardin .5s cubic-bezier(.2,.9,.3,1) both}
 .bsheet .bsec:last-child{margin-bottom:0}
 @media (max-width:560px){.bsheet{padding:20px 16px;border-radius:22px}}
-.bsec{margin-bottom:18px}
-.bhead{display:flex;align-items:center;gap:9px;margin-bottom:11px}
-.bhead .bico{width:26px;height:26px;border-radius:9px;display:grid;place-items:center;font-size:14px;flex:none;background:var(--bh-bg,var(--foam));box-shadow:0 2px 6px rgba(31,79,91,.10)}
+
+.bsec{margin-bottom:14px;border-bottom:1px solid var(--line);padding-bottom:14px}
+.bsheet .bsec:last-child{border-bottom:none;padding-bottom:0}
+
+/* the whole header is the toggle, so the hit target is the full row */
+.bhead{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;padding:4px 0;margin:0;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.bhead:focus-visible{outline:3px solid var(--ocean);outline-offset:3px;border-radius:8px}
 .bhead .btit{font-family:var(--bod);font-weight:800;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)}
-.bhead .bcount{margin-left:auto;font-size:11px;font-weight:700;color:var(--ink3);font-variant-numeric:tabular-nums}
+.bhead:hover .btit{color:var(--ink)}
+.bhead .bcount{font-size:11px;font-weight:700;color:var(--ink3);font-variant-numeric:tabular-nums;background:var(--foam);border-radius:999px;padding:2px 8px}
+.bhead .bchev{margin-left:auto;flex:none;width:15px;height:15px;color:var(--ink3);transition:transform .3s cubic-bezier(.2,.9,.3,1)}
+.bhead[aria-expanded="false"] .bchev{transform:rotate(-90deg)}
+
+/* grid-rows animates cleanly to auto height, unlike max-height guesswork */
+.bbody{display:grid;grid-template-rows:1fr;transition:grid-template-rows .32s cubic-bezier(.2,.9,.3,1),opacity .25s;opacity:1;margin-top:11px}
+.bbody[data-open="0"]{grid-template-rows:0fr;opacity:0;margin-top:0}
+.bbody > div{overflow:hidden;min-height:0}
+@media (prefers-reduced-motion:reduce){.bbody{transition:none}}
 
 /* the thesis — the one thing they must internalise, so it leads and is biggest */
-.bthesis{background:linear-gradient(140deg,rgba(126,200,227,.20),rgba(214,240,246,.42));border:1px solid rgba(126,200,227,.5);border-radius:24px;padding:20px 22px;margin-bottom:18px;box-shadow:0 12px 30px rgba(126,200,227,.16)}
+.bthesis{background:rgba(126,200,227,.12);border:1px solid rgba(126,200,227,.4);border-radius:20px;padding:18px 20px;margin-bottom:18px}
+.bthesis .btit{font-family:var(--bod);font-weight:800;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:8px}
 .bthesis p{font-size:17px;line-height:1.55;margin:0;font-weight:600;color:var(--ink)}
 
 /* numbered argument cards — countable at a glance while speaking */
-.bpoint{display:flex;gap:12px;align-items:flex-start;background:rgba(126,200,227,.07);border:1px solid var(--line);border-left:3px solid var(--ocean);border-radius:14px;padding:13px 15px;margin-bottom:8px;transition:transform .22s cubic-bezier(.2,.9,.3,1),box-shadow .22s}
-.bpoint:hover{transform:translateX(3px);box-shadow:0 6px 18px rgba(31,79,91,.10)}
-.bpoint .bn{flex:none;width:21px;height:21px;border-radius:50%;background:var(--ocean);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;margin-top:1px}
+.bpoint{display:flex;gap:12px;align-items:flex-start;padding:9px 0;margin:0}
+.bpoint + .bpoint{border-top:1px solid var(--line)}
+.bpoint .bn{flex:none;width:21px;height:21px;border-radius:50%;background:var(--foam);color:var(--ink2);font-size:11px;font-weight:800;display:grid;place-items:center;margin-top:2px}
 .bpoint p{margin:0;font-size:15px;line-height:1.55;color:var(--ink)}
 
 /* objection → answer, visually separated so the rebuttal is findable */
-.bcounter{background:rgba(255,159,127,.07);border:1px solid rgba(255,159,127,.42);border-radius:14px;padding:13px 15px;margin-bottom:8px}
-.bcounter .bq{display:flex;gap:8px;font-size:14.5px;line-height:1.5;font-weight:600;color:var(--coral-deep);margin:0}
-.bcounter .bq::before{content:"\\201C";font-family:var(--dis);font-size:26px;line-height:.8;opacity:.55;flex:none}
-.bcounter .ba{margin:9px 0 0;padding-top:9px;border-top:1px dashed rgba(255,159,127,.42);font-size:14.5px;line-height:1.55;color:var(--ink2)}
+.bcounter{padding:10px 0;margin:0}
+.bcounter + .bcounter{border-top:1px solid var(--line)}
+.bcounter .bq{font-size:14.5px;line-height:1.5;font-weight:700;color:var(--coral-deep);margin:0}
+.bcounter .ba{margin:7px 0 0;font-size:14.5px;line-height:1.55;color:var(--ink2)}
 .bcounter .ba b{font-weight:800;font-size:10px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:3px;color:var(--ink3)}
 
-.bfact{display:flex;gap:10px;background:rgba(238,219,184,.26);border:1px solid rgba(238,219,184,.85);border-radius:14px;padding:12px 15px;margin-bottom:8px;font-size:14.5px;line-height:1.55;color:var(--ink2)}
-.bfact::before{content:"\\1F4CA";flex:none;font-size:14px;line-height:1.5}
-.bwarn{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.5;color:var(--ink3);margin:10px 2px 0}
+.bfact{padding:10px 0;margin:0;font-size:14.5px;line-height:1.55;color:var(--ink2)}
+.bfact + .bfact{border-top:1px solid var(--line)}
+.bwarn{font-size:12.5px;line-height:1.5;color:var(--ink3);margin:12px 0 0;font-style:italic}
 
-.bcase{background:rgba(123,174,143,.08);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:14px;padding:13px 15px;margin-bottom:8px;font-size:14.5px;line-height:1.55;color:var(--ink2)}
+.bcase{padding:10px 0;margin:0;font-size:14.5px;line-height:1.55;color:var(--ink2)}
+.bcase + .bcase{border-top:1px solid var(--line)}
 .brief ul{margin:6px 0 0;padding-left:18px}
 .pill{display:inline-block;font-family:var(--bod);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
   border:1px solid var(--line);border-radius:999px;padding:4px 11px;margin-bottom:8px;color:var(--ink2)}
 `;
 
-function FlowRail({ at }) {
-  const steps = [["stance", "Stance"], ["research", "Research"], ["prep", "Prep"],
-    ["speak", "Speak"], ["report", "Feedback"]];
-  const idx = steps.findIndex(([k]) => k === at);
-  return (
-    <div className="flow" aria-label={`Step ${idx + 1} of ${steps.length}`}>
-      {steps.map(([k, label], i) => (
-        <React.Fragment key={k}>
-          <i data-on={i === idx ? "1" : "0"} data-done={i < idx ? "1" : "0"}>{label}</i>
-          {i < steps.length - 1 && <em data-done={i < idx ? "1" : "0"}>→</em>}
-        </React.Fragment>
-      ))}
-    </div>
-  );
-}
 
 function DebateMode({ mic, onFinish, lib, profile }) {
   const [stage, setStage] = useState("stance");
@@ -4367,6 +4747,8 @@ function DebateMode({ mic, onFinish, lib, profile }) {
   const [brief, setBrief] = useState(null);
   const [briefState, setBriefState] = useState("idle");
   const [briefLeft, setBriefLeft] = useState(0);   // seconds remaining on the reveal timer
+  const [briefOpen, setBriefOpen] = useState({ points: false, counters: false, facts: false, examples: false });
+  const toggleSec = (k) => setBriefOpen((o) => ({ ...o, [k]: !o[k] }));
   const briefTimers = useRef([]);
   const [prepChoice, setPrepChoice] = useState(60);
   const [customPrep, setCustomPrep] = useState(90);
@@ -4462,7 +4844,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
       else pending = payload;                 // hold until the floor passes
     };
 
-    askClaude(BRIEF_SYS, `Motion: "${topic}"\nThey are arguing: ${stanceById(stance).label} (${stanceById(stance).verb} the motion).`, 1100, undefined, GROQ_FAST_MODEL)
+    askClaude(BRIEF_SYS, `Motion: "${topic}"\nThey are arguing: ${stanceById(stance).label} (${stanceById(stance).verb} the motion).`, 800, undefined, GROQ_FAST_MODEL)
       .then((j) => settle({ data: { ...j, stance }, local: false }))
       .catch(() => settle({ data: localBrief(topic, stance), local: true }));
   };
@@ -4507,7 +4889,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
       ...TOPICS["Tech & AI"], ...TOPICS["Hot takes"], ...(lib.topics || []).map((t) => t.text)];
     return (
       <div>
-        <FlowRail at="stance" />
         <h1 className="h1">Pick a side.<br /><em>Then defend it.</em></h1>
         <p className="sub">
           A debate isn't a Table Topic with a stronger opinion. You commit to a position before you
@@ -4530,13 +4911,28 @@ function DebateMode({ mic, onFinish, lib, profile }) {
         </div>
 
         <div className="card">
-          <div className="eye" style={{ marginBottom: 12 }}>Your position</div>
+          <div className="side-head"><i /><span>Choose your side</span><i /></div>
           <div className="stance">
             {STANCES.map((st) => (
-              <button key={st.id} className="stancecard" data-on={stance === st.id ? "1" : "0"}
-                style={{ color: stance === st.id ? st.colour : undefined, borderLeft: `4px solid ${st.colour}` }}
-                aria-pressed={stance === st.id} onClick={() => setStance(st.id)}>
-                <b>{st.label}</b><span>{st.blurb}</span>
+              <button
+                key={st.id}
+                type="button"
+                className="stancecard"
+                data-on={stance === st.id ? "1" : "0"}
+                data-side={st.id}
+                style={{ "--sc-accent": st.accent, "--sc-glow": st.glow }}
+                aria-pressed={stance === st.id}
+                onClick={() => setStance(st.id)}
+              >
+                <StanceFrame id={st.id} accent={st.accent} flip={st.id === "for"}
+                  on={stance === st.id} />
+                <span className="sc-badge"><ThumbIcon down={st.id === "against"} /></span>
+                <BirdsMark />
+                <span className="sc-copy">
+                  <span className="sc-label">{st.label}</span>
+                  <span className="sc-rule"><i /><WaveRule /><i /></span>
+                  <span className="sc-blurb">{st.blurb}</span>
+                </span>
               </button>
             ))}
           </div>
@@ -4558,7 +4954,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     const st = stanceById(stance);
     return (
       <div>
-        <FlowRail at="research" />
         <h1 className="h1">Arm yourself.<br /><em>Optional.</em></h1>
 
         <div className="card" style={{ borderColor: st.colour }}>
@@ -4594,76 +4989,91 @@ function DebateMode({ mic, onFinish, lib, profile }) {
             )}
             <div className="bsheet">
             <div className="bthesis">
-              <div className="bhead" style={{ marginBottom: 8 }}>
-                <span className="bico" style={{ background: "rgba(126,200,227,.45)" }}>🎯</span>
-                <span className="btit">What this is really about</span>
-              </div>
+              <span className="btit">What this is really about</span>
               <p>{brief.summary}</p>
             </div>
 
             {(brief.points || []).length > 0 && (
               <div className="bsec">
-                <div className="bhead">
-                  <span className="bico" style={{ background: "rgba(126,200,227,.38)" }}>🗣️</span>
+                <button type="button" className="bhead" aria-expanded={briefOpen.points}
+                  onClick={() => toggleSec("points")}>
                   <span className="btit">Your arguments</span>
                   <span className="bcount">{brief.points.length}</span>
-                </div>
-                {brief.points.map((x, i) => (
-                  <div className="bpoint" key={i}>
-                    <span className="bn">{i + 1}</span>
-                    <p>{x}</p>
+                  <Chevron />
+                </button>
+                <div className="bbody" data-open={briefOpen.points ? "1" : "0"}>
+                  <div>
+                    {brief.points.map((x, i) => (
+                      <div className="bpoint" key={i}>
+                        <span className="bn">{i + 1}</span>
+                        <p>{x}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             )}
 
             {(brief.counters || []).length > 0 && (
               <div className="bsec">
-                <div className="bhead">
-                  <span className="bico" style={{ background: "rgba(255,159,127,.38)" }}>⚔️</span>
-                  <span className="btit">What they'll come back with</span>
+                <button type="button" className="bhead" aria-expanded={briefOpen.counters}
+                  onClick={() => toggleSec("counters")}>
+                  <span className="btit">What they&apos;ll come back with</span>
                   <span className="bcount">{brief.counters.length}</span>
+                  <Chevron />
+                </button>
+                <div className="bbody" data-open={briefOpen.counters ? "1" : "0"}>
+                  <div>
+                    {brief.counters.map((x, i) => {
+                      const [objection, ...rest] = splitCounter(x);
+                      return (
+                        <div className="bcounter" key={i}>
+                          <p className="bq">{objection}</p>
+                          {rest.length > 0 && (
+                            <p className="ba"><b>Your answer</b>{rest.join(" ")}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                {brief.counters.map((x, i) => {
-                  const [objection, ...rest] = splitCounter(x);
-                  return (
-                    <div className="bcounter" key={i}>
-                      <p className="bq">{objection}</p>
-                      {rest.length > 0 && (
-                        <p className="ba"><b>Your answer</b>{rest.join(" ")}</p>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
             )}
 
             {(brief.facts || []).length > 0 && (
               <div className="bsec">
-                <div className="bhead">
-                  <span className="bico" style={{ background: "rgba(238,219,184,.7)" }}>📎</span>
+                <button type="button" className="bhead" aria-expanded={briefOpen.facts}
+                  onClick={() => toggleSec("facts")}>
                   <span className="btit">Worth citing</span>
                   <span className="bcount">{brief.facts.length}</span>
+                  <Chevron />
+                </button>
+                <div className="bbody" data-open={briefOpen.facts ? "1" : "0"}>
+                  <div>
+                    {brief.facts.map((x, i) => <p className="bfact" key={i}>{x}</p>)}
+                    <p className="bwarn">
+                      Check anything you plan to say as fact. A confident wrong number is worse than no number.
+                    </p>
+                  </div>
                 </div>
-                {brief.facts.map((x, i) => <div className="bfact" key={i}><span>{x}</span></div>)}
-                <p className="bwarn">
-                  <span>⚠️</span>
-                  <span>Check anything you plan to say as fact. A confident wrong number is worse than no number.</span>
-                </p>
               </div>
             )}
 
             {(brief.examples || []).length > 0 && (
               <div className="bsec">
-                <div className="bhead">
-                  <span className="bico" style={{ background: "rgba(123,174,143,.32)" }}>💡</span>
+                <button type="button" className="bhead" aria-expanded={briefOpen.examples}
+                  onClick={() => toggleSec("examples")}>
                   <span className="btit">Cases you could use</span>
                   <span className="bcount">{brief.examples.length}</span>
+                  <Chevron />
+                </button>
+                <div className="bbody" data-open={briefOpen.examples ? "1" : "0"}>
+                  <div>
+                    {brief.examples.map((x, i) => <p className="bcase" key={i}>{x}</p>)}
+                  </div>
                 </div>
-                {brief.examples.map((x, i) => <div className="bcase" key={i}>{x}</div>)}
               </div>
             )}
-
             </div>
 
             <div className="row">
@@ -4685,7 +5095,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     const left = Math.max(0, prepSeconds - prep.t);
     return (
       <div>
-        <FlowRail at="prep" />
         {!running ? (
           <>
             <h1 className="h1">How long do you<br /><em>actually need?</em></h1>
@@ -4798,7 +5207,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     const live = stage === "live";
     return (
       <div>
-        {!live && <FlowRail at="speak" />}
         {!live && (
           <div className="card" style={{ borderColor: st.colour }}>
             <span className="pill" style={{ color: st.colour, borderColor: st.colour }}>Arguing {st.label}</span>
@@ -4858,7 +5266,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
   return (
     <div>
       <Petals go={petals} />
-      <FlowRail at="report" />
       <h1 className="h1">The <em>verdict</em></h1>
 
       <div className="card moss">
@@ -5546,8 +5953,17 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
 
       <div className={"card " + (isWotd ? "sun" : "sky")}>
         {isWotd && <div className="tag">word of the day</div>}
+        {/* its own row, above the card face: as an absolute overlay this sat on
+            top of the flip surface, so the card's click handler swallowed the
+            tap and "Next word" never fired */}
         {phase !== "live" && (
-          <button className="ghostlink" style={{ position: "absolute", top: 22, right: 24 }} onClick={next}>Next word →</button>
+          <div className="wcard-top">
+            <button
+              type="button"
+              className="ghostlink"
+              onClick={(e) => { e.stopPropagation(); next(); }}
+            >Next word →</button>
+          </div>
         )}
         <div className="flip" data-flip={flipped ? "1" : "0"} onClick={() => phase !== "live" && setFlipped((v) => !v)}>
           <div className="flip-in">
@@ -5759,8 +6175,18 @@ function QuickModeCard({ title, blurb, onClick, img }) {
     >
       <div className="absolute inset-0 bg-gradient-to-b from-black/35 to-black/25" />
       <div className="relative flex flex-1 flex-col justify-end p-4">
-        <div className="font-[var(--dis)] text-[20px] font-bold leading-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,.4)]">{title}</div>
-        <div className="mt-1 text-[14px] leading-snug text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,.3)]">{blurb}</div>
+        {/* "Vocabulary" is a single long word: in a narrow column it cannot wrap,
+            so it used to overflow and clip. Scale with the column and allow a
+            break rather than truncating the label. */}
+        <div
+          className="font-[var(--dis)] font-bold leading-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,.4)]"
+          style={{ fontSize: "clamp(15px, 4.6vw, 20px)", hyphens: "auto", overflowWrap: "anywhere" }}
+          lang="en"
+        >{title}</div>
+        <div
+          className="mt-1 leading-snug text-white/90 drop-shadow-[0_1px_3px_rgba(0,0,0,.3)]"
+          style={{ fontSize: "clamp(11.5px, 3.2vw, 14px)", paddingRight: 30 }}
+        >{blurb}</div>
         <span className="absolute bottom-3 right-3 grid h-7 w-7 place-items-center rounded-full bg-white/90 text-ink shadow-sm transition group-active:scale-90">
           <Icon name="arrow" size={14} />
         </span>
@@ -5799,7 +6225,6 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
   const rawName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || "";
   const firstName = (rawName.split("@")[0].split(" ")[0] || "there").trim();
 
-  const nextStep = agenda.vocab ? (agenda.topic ? "debate" : "topics") : "vocab";
 
   // Palm images mapped to height progression: seed → sprout → small → medium → tall
   const palmImages = [
@@ -5809,7 +6234,11 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
     "/images/home/plam-medium.png",    // Day 4
     "/images/home/palm-tall.png",      // Day 5+
   ];
-  const palmSizes = [32, 36, 40, 44, 48];
+  // Rendered HEIGHTS, not box sizes. The art is bottom-aligned on a shared
+  // baseline and the width follows the aspect ratio, so a tall palm actually
+  // looks tall — forcing every stage into the same square made a seed and a
+  // full tree draw at nearly the same height.
+  const palmSizes = [22, 34, 48, 62, 76];
 
   // Map streak to appropriate palm stage for 7-day challenge
   const getPalmStage = (dayNum) => {
@@ -5835,15 +6264,19 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
 
       {/* HERO MISSION CARD */}
       <section className="relative overflow-hidden rounded-card border border-white/50 bg-gradient-to-b from-foam/95 to-lagoon/30 shadow-[0_20px_60px_rgba(10,158,196,.12)] backdrop-blur-xl">
-        <div className="relative z-10 flex items-end gap-4 p-6 pb-16 sm:p-7 sm:pb-20">
+        {/* Side-by-side only once there is room for it: at phone widths a fixed
+            176px turtle left the copy a sliver of a column, breaking the
+            headline one word per line. Below sm it stacks instead. */}
+        <div className="relative z-10 flex flex-col items-center gap-3 p-6 pb-16 text-center sm:flex-row sm:items-end sm:gap-4 sm:p-7 sm:pb-20 sm:text-left">
           <div className="club-turtle shrink-0">
-            <HeroTurtleArt className="h-44 w-44 drop-shadow-[0_12px_20px_rgba(10,158,196,.25)] sm:h-52 sm:w-52" />
+            <HeroTurtleArt className="h-32 w-32 drop-shadow-[0_12px_20px_rgba(10,158,196,.25)] sm:h-52 sm:w-52" />
           </div>
-          <div className="min-w-0 flex-1 pb-2">
+          <div className="w-full min-w-0 flex-1 pb-2">
             <p className="m-0 text-[14.5px] font-semibold text-ink/80">{greeting}, {firstName}! 👋</p>
             <p className="mb-0 mt-2 text-[11px] font-bold uppercase tracking-[.14em] text-deep-ocean">~ Today&apos;s Mission ~</p>
-            <h1 className="mb-0 mt-1 font-[var(--dis)] text-[28px] font-extrabold leading-[1.05] tracking-tight text-ink sm:text-[34px]">
-              Speak for<br />60 seconds
+            <h1 className="mb-0 mt-1 font-[var(--dis)] font-extrabold leading-[1.05] tracking-tight text-ink"
+              style={{ fontSize: "clamp(26px, 7.4vw, 34px)", textWrap: "balance" }}>
+              Speak for 60 seconds
             </h1>
             <p className="mb-5 mt-2 text-[13px] text-ink/70">~ One take. One step closer. 🌊</p>
             <button
@@ -5910,7 +6343,7 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
           )}
         </div>
 
-        <div className="mt-5 flex items-end justify-center gap-2">
+        <div className="mt-5 flex items-end justify-center gap-2" style={{ minHeight: 96 }}>
           {Array.from({ length: 7 }, (_, i) => i + 1).map((d) => {
             const stageIdx = getPalmStage(d);
             const isDone = d <= actualStreak;
@@ -5919,12 +6352,12 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
             const palmSize = palmSizes[stageIdx];
 
             return (
-              <div key={d} className="flex flex-col items-center gap-1">
+              <div key={d} className="flex flex-1 flex-col items-center justify-end gap-1">
                 <img
                   src={palmSrc}
                   alt=""
-                  style={{ width: palmSize, height: palmSize }}
-                  className={`object-contain ${isDone ? "opacity-100" : "opacity-50"}`}
+                  style={{ height: palmSize, width: "auto", maxWidth: "100%" }}
+                  className={`object-contain object-bottom ${isDone ? "opacity-100" : "opacity-50"}`}
                 />
                 <span className={`text-[9px] font-semibold ${isToday ? "text-deep-ocean font-bold" : isDone ? "text-palm-green" : "text-ink/40"}`}>Day {d}</span>
               </div>
@@ -5953,7 +6386,9 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
         <button
           onClick={() => {
             if (!onChallenge) { setActive(7); setDays([]); }
-            go(nextStep);
+            // the challenge is a daily speaking drill, so it always opens
+            // Table Topics — not wherever the meeting agenda happens to be
+            go("topics");
           }}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-btn bg-deep-ocean py-3.5 text-[15px] font-bold text-white shadow-[0_14px_30px_rgba(8,126,164,.35)] transition active:scale-[.98]"
         >
@@ -6657,10 +7092,14 @@ function YapApp() {
     }
   }, [tab]);
 
+  // every xp award in the app funnels through here, so this is the one place
+  // the celebration has to be wired up
+  const [burst, setBurst] = useState(null);
   const onFinish = useCallback(({ xp, seconds, kind }) => {
     setStats((s) => ({ xp: s.xp + xp, reps: s.reps + 1, seconds: s.seconds + seconds }));
     setAgenda((a) => ({ ...a, [kind === "topic" ? "topic" : "vocab"]: true }));
     setDays((v) => (v.length < active ? [...v, v.length + 1] : v));
+    if (xp > 0) setBurst({ amount: xp, key: Date.now() });
   }, [active, setStats, setAgenda, setDays]);
 
   const stage = stageFor(stats.reps);
@@ -6767,6 +7206,9 @@ function YapApp() {
           {stage.name} · {stats.reps} speech{stats.reps === 1 ? "" : "es"} on record
         </p>
       </div>
+      {burst && (
+        <PointsBurst key={burst.key} amount={burst.amount} onDone={() => setBurst(null)} />
+      )}
       {!isRecording && (
       <div className="navdock" data-hidden={navHidden ? "1" : "0"}>
         <nav className="nav" ref={navRef} role="tablist" aria-label="Meeting sections">
