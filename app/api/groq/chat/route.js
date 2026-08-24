@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 
-// Groq's flagship general-purpose instruct model — good at following the
-// strict "return only raw JSON" system prompts this app relies on everywhere.
-const GROQ_CHAT_MODEL = "llama-3.3-70b-versatile";
+// Groq retired the Llama chat models (they 404 as model_not_found), so the app
+// runs on gpt-oss. Note this is a REASONING model: it returns a separate
+// `reasoning` field alongside the answer, which Groq's own JSON-mode validator
+// rejects — so `response_format` is deliberately NOT set below, and the JSON is
+// parsed out of the content instead. Every caller already tolerates that.
+const GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
 
-// Callers may request a faster model, but only from this list — the body comes
-// from the browser, so an arbitrary model string must never reach Groq.
-const ALLOWED_MODELS = new Set([GROQ_CHAT_MODEL, "llama-3.1-8b-instant"]);
+// Callers may request a different model, but only from this list — the body
+// comes from the browser, so an arbitrary model string must never reach Groq.
+const ALLOWED_MODELS = new Set([GROQ_CHAT_MODEL, "openai/gpt-oss-20b"]);
 
 /* Every caller on the client (askClaude) sends { system, user, max_tokens }
  * and expects back a JSON object it can hand straight to JSON.parse. Keeping
@@ -36,9 +39,11 @@ export async function POST(request) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model: ALLOWED_MODELS.has(model) ? model : GROQ_CHAT_MODEL,
-        max_tokens: maxTokens || 900,
+        // the reasoning pass burns tokens before the answer is written, so the
+        // budget needs headroom beyond what the caller asked for
+        max_tokens: Math.min(Math.max((maxTokens || 900) * 2, 1400), 3000),
         temperature: 0.7,
-        response_format: { type: "json_object" },
+        reasoning_effort: "low",
         messages: [
           ...(system ? [{ role: "system", content: system }] : []),
           { role: "user", content: user },

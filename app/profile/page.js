@@ -3,10 +3,13 @@
 import { useAuth } from "@/lib/supabase/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useUpgrade } from "@/lib/razorpay";
 
 export default function ProfilePage() {
   const { user, profile, loading, signOut } = useAuth();
   const router = useRouter();
+  // hooks must run on every render, so this stays above the early returns below
+  const { upgrade, paying, payError } = useUpgrade({ email: user?.email });
 
   useEffect(() => {
     if (!loading && !user) {
@@ -85,6 +88,8 @@ export default function ProfilePage() {
           </p>
           {profile?.plan !== "paid" && (
             <button
+              onClick={upgrade}
+              disabled={paying}
               style={{
                 background: "var(--ink)",
                 color: "white",
@@ -93,11 +98,17 @@ export default function ProfilePage() {
                 padding: "12px 24px",
                 fontSize: "14px",
                 fontWeight: "500",
-                cursor: "pointer",
+                cursor: paying ? "default" : "pointer",
+                opacity: paying ? 0.6 : 1,
               }}
             >
-              Upgrade to PRO
+              {paying ? "Opening payment…" : "Upgrade to PRO — ₹199/month"}
             </button>
+          )}
+          {payError && (
+            <p style={{ marginTop: "12px", marginBottom: 0, fontSize: "13px", color: "#E8674A" }}>
+              {payError}
+            </p>
           )}
         </div>
 
