@@ -12,8 +12,8 @@ import {
 } from "@/lib/yap/analysis";
 import { langName, langProfile } from "@/lib/yap/lang";
 import {
-  groqTranscribe, GROQ_FAST_MODEL, sarvamReady, sarvamTranscribe, speakAs,
-  sarvamTranslate, sarvamTransliterate, replyLangCode, askClaude, EVAL_SYS,
+  groqTranscribe, GROQ_FAST_MODEL, sarvamReady, sarvamTranscribe,
+  sarvamTransliterate, askClaude, EVAL_SYS,
 } from "@/lib/yap/api";
 import {
   loadLibrary, checkWordUsage, usageGrammar, WORD_JUDGE_SYS, pick, spinTick,
@@ -108,7 +108,6 @@ function useMic() {
 
   const [listening, setListening] = useState(false);
   const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);        // non-fatal: recording works, transcription doesn't
   const [speaking, setSpeaking] = useState(false);
   const [finalText, setFinalText] = useState("");
   const [interim, setInterim] = useState("");
@@ -212,7 +211,7 @@ function useMic() {
     if (want.current || rec.current || recorder.current || stream.current) stop();
     session.current += 1;
     const mySession = session.current;
-    setError(null); setNotice(null);
+    setError(null);
     fin.current = ""; finalTextRef.current = ""; setFinalText(""); setInterim("");
     // a previous take's multilingual result must never be scored on this one
     sarvamRef.current = null; sarvamPendingRef.current = false; setSarvam(null);
@@ -261,14 +260,6 @@ function useMic() {
     }
     stream.current = s;
     refreshDevices();
-
-    /* warn about the Bluetooth call profile, which wrecks recognition */
-    try {
-      const st = s.getAudioTracks()[0] && s.getAudioTracks()[0].getSettings();
-      if (st && st.sampleRate && st.sampleRate <= 16000) {
-        setNotice("Your headset is in call mode, which lowers audio quality a lot. The phone's own mic will transcribe far better.");
-      }
-    } catch (e) { /* getSettings unsupported */ }
 
     /* ---- retain the audio (#1) ---- */
     if (record && typeof MediaRecorder !== "undefined") {
@@ -380,7 +371,6 @@ function useMic() {
 
     /* ---- transcription ---- */
     if (!canTranscribe) {
-      setNotice("This browser records but can't transcribe live — Chrome or Edge can. Your audio is still saved.");
       setListening(true);
       return true;
     }
@@ -434,7 +424,6 @@ function useMic() {
       if (now - lastRestart.current > 60000) restarts.current = 0;
       totalRestarts.current += 1;
       if (restarts.current >= 8 || totalRestarts.current >= 40) {
-        setNotice("Live captions have stopped, but your recording is still running and will be transcribed in full at the end.");
         return;
       }
       // a floor of ~400ms keeps consecutive re-acquisitions from stacking up
@@ -453,23 +442,13 @@ function useMic() {
     return true;
   }, [canRecord, canTranscribe, secure, sandboxed, deviceId, lang, permissionState, refreshDevices, stop]);
 
-  /* ---- mobile lifecycle: don't silently die when the screen locks (#10) ---- */
-  useEffect(() => {
-    const onHide = () => {
-      if (!want.current) return;
-      setNotice("Recording paused when you left the app. Everything you'd said is kept.");
-    };
-    document.addEventListener("visibilitychange", () => { if (document.hidden) onHide(); });
-    return () => document.removeEventListener("visibilitychange", onHide);
-  }, []);
-
   useEffect(() => () => stop(), [stop]);
 
   return {
     // capability
     supported: canRecord && canTranscribe, canRecord, canTranscribe, sandboxed, secure,
     // state
-    listening, error, notice, level, speaking, finalText, interim, clip, sarvam,
+    listening, error, level, speaking, finalText, interim, clip, sarvam,
     /* Whatever the browser heard live. Kept for the running caption. */
     /* The truest record we have. Web Speech is English-first, so when Sarvam
        has re-read the tape its version wins — that is the whole point of the
@@ -707,9 +686,15 @@ function Grass({ level, live }) {
 /* Full-screen "on air" recording view — background photo is the whole UI,
    controls float on top. Shared by Table Topics and Debate; Vocabulary's
    inline flip-card recorder is a different, smaller surface. */
-function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stopLabel = "Finish speech", slot }) {
+function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stopLabel = "Finish speech", slot, minSeconds = 0 }) {
   const level = mic?.level || [];
   const speaking = !!mic?.speaking;
+
+  /* When the speaker picked a time slot, the whole point is holding the floor
+     for it. Hide stop until the clock gets there so the slot is a commitment,
+     not a suggestion; the stopwatch's own limit still ends the take. */
+  const locked = elapsed < minSeconds;
+  const remaining = Math.max(0, Math.ceil(minSeconds - elapsed));
 
   /* Toastmasters timing lights. The thresholds already live on the slot; this
      just surfaces them while the speaker is actually talking, which is the
@@ -789,16 +774,29 @@ function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stop
             <p className="m-0 mt-1 text-[13px] text-white/90 drop-shadow-[0_1px_4px_rgba(8,60,90,.3)]">Speak clearly and naturally</p>
           </div>
 
-          <button
-            onClick={onStop}
-            aria-label={stopLabel}
-            className="rec-stopbtn grid h-20 w-20 place-items-center rounded-full bg-white shadow-[0_14px_30px_rgba(8,60,90,.3)] transition active:scale-90"
-          >
-            <span className="grid h-9 w-9 place-items-center rounded-2xl bg-deep-ocean">
-              <span className="h-3.5 w-3.5 rounded-[3px] bg-white" />
-            </span>
-          </button>
-          <div className="text-[13px] font-bold text-deep-ocean">Tap to stop</div>
+          {locked ? (
+            <div
+              className="grid h-20 w-20 place-items-center rounded-full bg-white/45 shadow-[0_14px_30px_rgba(8,60,90,.18)] backdrop-blur-sm"
+              role="timer"
+              aria-live="off"
+              aria-label={`${remaining} seconds left before you can stop`}
+            >
+              <b className="font-[var(--dis)] text-[22px] font-semibold text-deep-ocean">{remaining}</b>
+            </div>
+          ) : (
+            <button
+              onClick={onStop}
+              aria-label={stopLabel}
+              className="rec-stopbtn grid h-20 w-20 place-items-center rounded-full bg-white shadow-[0_14px_30px_rgba(8,60,90,.3)] transition active:scale-90"
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-2xl bg-deep-ocean">
+                <span className="h-3.5 w-3.5 rounded-[3px] bg-white" />
+              </span>
+            </button>
+          )}
+          <div className="text-[13px] font-bold text-deep-ocean">
+            {locked ? `Keep going — ${fmt(remaining)} to go` : "Tap to stop"}
+          </div>
         </div>
       </div>
     </div>
@@ -1610,7 +1608,6 @@ function Signal({ elapsed, slot }) {
 
 function Notice({ mic }) {
   const hard = mic.error;
-  const soft = mic.notice;
   const gap = !mic.canRecord
     ? (mic.sandboxed
         ? "Preview frames block the microphone. Run this on localhost to record — or write your answer and it still gets the full evaluation."
@@ -1620,12 +1617,11 @@ function Notice({ mic }) {
       : !mic.canTranscribe
         ? "This browser records but can't transcribe live — Chrome or Edge can. You can still write your answer."
         : null;
-  if (!hard && !soft && !gap) return null;
+  if (!hard && !gap) return null;
   return (
     <>
       {hard && <div className="warnbox" role="alert">{hard}</div>}
       {!hard && gap && <div className="warnbox">{gap}</div>}
-      {soft && <div className="tip" role="status" style={{ marginBottom: 14 }}>{soft}</div>}
     </>
   );
 }
@@ -1635,29 +1631,6 @@ function Notice({ mic }) {
 
 /* Sarvam's transcript, offered next to the live one. It is usually the better
    record for anything that isn't plain English, but the user decides. */
-/* Turn any piece of YAP's coaching into the user's language, on demand. */
-function TranslateButton({ text, label = "Read this in my language" }) {
-  const [out, setOut] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const to = replyLangCode();
-  if (!sarvamReady() || !text || to === "en-IN") return null;
-  const go = () => {
-    setBusy(true);
-    sarvamTranslate(text, "en-IN", to)
-      .then((t) => setOut(t || null))
-      .catch(() => setOut("__fail__"))
-      .finally(() => setBusy(false));
-  };
-  return (
-    <div style={{ marginTop: 10 }}>
-      {!out && <button className="btn sm" onClick={go} disabled={busy}>
-        {busy ? "Translating…" : label}</button>}
-      {out && out !== "__fail__" && <div className="note" style={{ borderColor: "var(--ocean)" }}>{out}</div>}
-      {out === "__fail__" && <p className="ex">Translation is unavailable right now.</p>}
-    </div>
-  );
-}
-
 /* Romanise Indic script for anyone who speaks the language but reads it slowly. */
 function RomanToggle({ text, from }) {
   const [out, setOut] = useState(null);
@@ -1795,7 +1768,7 @@ function AhCounterBody({ a, extra }) {
 
 function Corrections({ items }) {
   const label = { grammar: ["Grammar", "g"], regional: ["Fine here, odd abroad", "r"],
-    vocab: ["Sharper word", "v"], register: ["Too casual", "g"] };
+    register: ["Too casual", "g"] };
   return items.map((it, i) => {
     const [txt, cls] = label[it.kind] || label.grammar;
     return (
@@ -2836,7 +2809,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
           {ai.fix && (<>
             <div className="eye" style={{ marginTop: 16 }}>Next round</div>
             <div className="note">{ai.fix}</div>
-            <TranslateButton text={ai.fix} />
           </>)}
         </div>
       )}
@@ -2968,8 +2940,6 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
 
   if (phase === "report" && rep) {
     const { r, tRep, aRep, gRep, eRep, usedW } = rep;
-    const vocab = ai && ai.vocab ? ai.vocab.map((v) => ({ was: v.weak, now: v.better, why: v.why, kind: "vocab" })) : [];
-
     const cards = [];
 
     cards.push(
@@ -3190,28 +3160,12 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
         <div className="eye" style={{ marginTop: 14 }}>Commendation</div>
         <p style={{ fontSize: 15.5, lineHeight: 1.65, marginTop: 6 }}>{ai && ai.commend ? ai.commend : eRep.commend}</p>
         <FixIt label="The one recommendation">{ai && ai.recommend ? ai.recommend : eRep.recommend}</FixIt>
-        <TranslateButton text={ai && ai.recommend ? ai.recommend : eRep.recommend} />
-        {sarvamReady() && (
-          <button className="btn sm" style={{ marginTop: 10 }}
-            onClick={() => speakAs("coach", ai && ai.recommend ? ai.recommend : eRep.recommend, replyLangCode())}>
-            <span><Icon name="wave" size={16} /> Read it to me</span>
-          </button>
-        )}
         {aiState === "loading" && <p className="ex" style={{ marginTop: 12 }}><span className="spin" />the evaluator is still writing…</p>}
         {aiState === "offline" && <div className="tip" style={{ marginTop: 12 }}>
           This evaluation was written from your measured numbers. Connect an API key for a written one that quotes you directly.
         </div>}
       </div>
     );
-
-    if (vocab.length > 0) {
-      cards.push(
-        <div className="card pcard" key="vocabswap">
-          <PearlOpenHeader label="Words the evaluator would swap" />
-          <Corrections items={vocab} />
-        </div>
-      );
-    }
 
     if (r.clip && r.clip.url) {
       cards.push(<Playback clip={r.clip} label="Hear it back" key="playback" />);
@@ -3377,6 +3331,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
           onStop={() => finish()}
           onBack={() => { mic.stop(); watch.stop(); watch.reset(); setPhase("pick"); }}
           slot={slot}
+          minSeconds={slot.id}
         />
       )}
 
