@@ -3,6 +3,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AuthBar } from "@/components/AuthBar";
 import { useAuth } from "@/lib/supabase/useAuth";
+import { useUpgrade } from "@/lib/razorpay";
+import {
+  SLOTS, TOPICS, VOCAB, ROLES, PANEL, BACKUP, MODERATOR, PLANS,
+  COMMON, BASIC, ACADEMIC, HEDGES, HARD_FILLERS, SOFT_FILLERS, AH_SOUNDS,
+  STANCE, CONNECT, CLOSERS,
+} from "@/lib/yap/content";
 
 /* ============================================================================
    YAP — speak · practice · evolve
@@ -419,204 +425,6 @@ const CSS = `
 }
 `;
 /* ------------------------------- CONTENT --------------------------------- */
-
-const SLOTS = [
-  { id: 60, label: "1 min", name: "Table Topic", green: 30, amber: 45, red: 60, blurb: "Classic Table Topics. Answer, don't ramble." },
-  { id: 90, label: "90 sec", name: "Extended topic", green: 45, amber: 65, red: 90, blurb: "Room for a reason and an example." },
-  { id: 120, label: "2 min", name: "Opinion piece", green: 60, amber: 90, red: 120, blurb: "Take a side and defend it properly." },
-  { id: 300, label: "5 min", name: "Prepared speech", green: 240, amber: 270, red: 300, blurb: "Full speech shape: open, body, close." },
-];
-
-const TOPICS = {
-  "Table Topics": [
-    "The best advice you completely ignored.",
-    "Something you changed your mind about this year.",
-    "A rule at home you never understood.",
-    "The last time you were genuinely nervous.",
-    "What your hometown gets wrong about itself.",
-    "A skill you'd bring back if you could.",
-    "The most useless thing you're excellent at.",
-    "Describe your week as a weather report.",
-    "Something everyone praises that you find overrated.",
-    "The compliment you never know how to accept.",
-    "A small thing that ruins your day.",
-    "What you'd put on a billboard outside your college.",
-    "The subject you'd make compulsory for everyone.",
-    "A time being wrong worked out well.",
-    "What you're saving for and why.",
-  ],
-  "Placement & GD": [
-    "Reservation in the private sector — a correction, or a step backwards?",
-    "AI will destroy more Indian jobs than it creates.",
-    "Coaching culture has replaced actual education.",
-    "Moonlighting is theft, not freedom.",
-    "Work from home made juniors worse at their jobs.",
-    "Should engineering seats be cut rather than expanded?",
-    "Startups have made failure fashionable and that's dangerous.",
-    "English fluency is unfairly used as a proxy for intelligence.",
-    "Campus placements reward the wrong things.",
-    "A four-day work week would work in India.",
-    "Internships should be paid by law.",
-    "Reskilling is the employee's problem, not the employer's.",
-    "Should India cap working hours in the tech industry?",
-    "Degrees will matter less than portfolios in ten years.",
-    "Group discussions are a poor way to judge a candidate.",
-  ],
-  "Tech & AI": [
-    "Quick commerce is burning cash for a habit nobody asked for.",
-    "Social media should require age verification.",
-    "Gig platforms owe their riders employee status.",
-    "Your phone knows you better than your closest friend.",
-    "India should build its own models rather than licence them.",
-    "Data localisation protects citizens more than it slows startups.",
-    "Algorithms should be auditable by law.",
-    "UPI succeeded because it was boring, not because it was clever.",
-    "Screen time limits should be set by parents, not platforms.",
-    "Open source is the only sustainable way to build AI.",
-    "Electric vehicles are a city solution sold as a national one.",
-    "Facial recognition has no place in public policing.",
-  ],
-  "Society & policy": [
-    "Voting should be compulsory in India.",
-    "Free electricity is welfare, not vote-buying.",
-    "The three-language formula is fair to every state.",
-    "Cities should charge for private car use in centres.",
-    "Cash transfers beat subsidised goods.",
-    "Sports deserve public funding as much as science does.",
-    "Public transport should be free for students.",
-    "Air pollution is a health emergency we've normalised.",
-    "Regional cinema is telling better stories than Bollywood.",
-    "Marriage as an institution needs redesigning, not defending.",
-    "Migration to metros is a failure of small towns.",
-    "Should India have a nationwide rental law?",
-  ],
-  "Hot takes": [
-    "Group projects taught you more about people than about the subject.",
-    "Being busy has become a personality.",
-    "Streaming killed the album.",
-    "Nobody reads the terms and conditions, and that's fine.",
-    "The best thing about your generation is also the worst thing about it.",
-    "Politeness online is dead and nobody misses it.",
-    "Nostalgia is a marketing strategy now.",
-    "Productivity advice is mostly a way to avoid working.",
-    "Reality shows are more honest than the news.",
-    "Cricket has too much cricket.",
-    "Every festival has become a shopping event.",
-    "Sarcasm is a poor substitute for an argument.",
-  ],
-  "Interview classics": [
-    "Tell me about yourself in sixty seconds.",
-    "Why should we hire you over someone with more experience?",
-    "Describe a time you disagreed with a teammate.",
-    "What's a decision you regret and what did you learn?",
-    "Where do you want to be in five years, honestly?",
-    "Sell me something on this table.",
-    "What would your last manager say is your weakness?",
-    "Explain what you studied to someone from another field.",
-    "A time you failed and what you did next.",
-    "Why this company and not the one next door?",
-  ],
-};
-
-const VOCAB = [
-  { w: "Ostensible", p: "adjective", d: "Given as the reason, but probably not the real one.", e: "The ostensible reason was scale; the real one was talent." },
-  { w: "Untenable", p: "adjective", d: "Impossible to defend or keep going.", e: "Holding both positions at once is untenable." },
-  { w: "Precedent", p: "noun", d: "An earlier case used as the rule for later ones.", e: "That judgment set the precedent everyone cites now." },
-  { w: "Mitigate", p: "verb", d: "To make something bad less severe.", e: "Insurance mitigates the loss; it doesn't prevent it." },
-  { w: "Contingent", p: "adjective", d: "Depending on something else happening first.", e: "Funding is contingent on the pilot clearing 60% retention." },
-  { w: "Salient", p: "adjective", d: "The part that matters most.", e: "The salient point is cost, not speed." },
-  { w: "Corroborate", p: "verb", d: "To back a claim with more evidence.", e: "Two other surveys corroborate that number." },
-  { w: "Extrapolate", p: "verb", d: "To stretch a known trend into unknown territory.", e: "You can't extrapolate a decade from one quarter." },
-  { w: "Nominal", p: "adjective", d: "In name only, or very small in amount.", e: "The fee is nominal — ten rupees a month." },
-  { w: "Prudent", p: "adjective", d: "Careful and sensible about what comes next.", e: "It would be prudent to hold six months of runway." },
-  { w: "Tangible", p: "adjective", d: "Real enough to point at or measure.", e: "Give me one tangible outcome from that policy." },
-  { w: "Arbitrary", p: "adjective", d: "Chosen with no real reason behind it.", e: "The cut-off is arbitrary — why 75 and not 70?" },
-  { w: "Incremental", p: "adjective", d: "Happening in small steps rather than one leap.", e: "The gains are incremental, but they compound." },
-  { w: "Disproportionate", p: "adjective", d: "Far bigger or smaller than it should be.", e: "The penalty is disproportionate to the mistake." },
-  { w: "Sustainable", p: "adjective", d: "Able to keep going without breaking down.", e: "Discounting isn't a sustainable way to hold a market." },
-  { w: "Nuance", p: "noun", d: "A small difference that changes the meaning.", e: "You lose the nuance when you make it a yes-or-no question." },
-];
-
-const ROLES = [
-  { id: "timer", icon: "timer", name: "The Timer", role: "keeps you honest" },
-  { id: "ah", icon: "hand", name: "Ah-Counter", role: "tallies the ums" },
-  { id: "gram", icon: "book", name: "Grammarian", role: "catches the slips" },
-  { id: "eval", icon: "cap", name: "General Evaluator", role: "the whole picture" },
-];
-
-const PANEL = [
-  { id: "kavya", name: "Kavya", color: "#FF9F7F", mood: "focused", role: "Steamroller", brief: "Interrupts, talks long, hates hearing a point twice.", weight: 1.5 },
-  { id: "arjun", name: "Arjun", color: "#C99A4B", mood: "thinking", role: "Stat machine", brief: "Quotes numbers and asks you for your denominator.", weight: 1.1 },
-  { id: "meera", name: "Meera", color: "#D98E9B", mood: "excited", role: "Tangent", brief: "Pulls the topic sideways to culture and anecdotes.", weight: 1.0 },
-  { id: "rohit", name: "Rohit", color: "#7EC8E3", mood: "encouraging", role: "Closer", brief: "Quiet, then summarises better than everyone.", weight: 0.7 },
-];
-
-const BACKUP = {
-  kavya: [
-    "Let me start, because I think the framing of this question is off. We keep arguing about the outcome when the real problem sits much earlier in the pipeline.",
-    "No, let me finish that point. If we only look at the visible cost we'll miss the part that actually hurts people.",
-    "That's more or less what I said two minutes ago, just with different words. Can we move it forward?",
-    "I'd push back hard on that. It sounds clean in a discussion but it doesn't survive contact with how things actually run.",
-    "Fine, I'll concede that much. But the burden is still on you to explain who pays for it.",
-  ],
-  arjun: [
-    "The 2024 figure I remember is somewhere around thirty-four percent, so the base rate matters a lot before we call this a crisis.",
-    "If you look at the growth rate rather than the absolute number, it's been almost flat for six years. That changes the argument.",
-    "I'd want to know the denominator before accepting that. A big number without a base is just a big number.",
-    "Roughly one point two lakh crore, if I'm remembering the budget line correctly. Someone check me on that.",
-    "Numbers aside, I don't think anyone here disputes the direction. We're arguing about the speed.",
-  ],
-  meera: [
-    "This is basically what happened around demonetisation — everybody focused on the announcement and nobody tracked what happened eighteen months later.",
-    "Isn't the deeper issue really education though? We keep treating this as an economics question.",
-    "Can I bring in a global angle here — the Scandinavian countries handle this completely differently and it's worth asking why.",
-    "I think we're missing the cultural dimension entirely. Policy doesn't land in a vacuum.",
-    "Slightly tangential, but my cousin works in exactly this sector and what he describes is nothing like what we're discussing.",
-  ],
-  rohit: [
-    "Quick summary of where we are: we're split on cost versus access, and nobody has bridged the two yet.",
-    "Nobody has said who actually bears the downside here. That seems like the question worth answering.",
-    "I agree with the second half of that, not the first. The evidence supports the outcome, not the mechanism.",
-    "Let's put a number on 'soon' before we argue about whether it's realistic.",
-    "That's fair, I'll withdraw my earlier point. It doesn't hold given what Arjun just said.",
-  ],
-};
-
-const MODERATOR = [
-  "Let's bring in someone who hasn't spoken yet. Over to you.",
-  "You've been quiet — what's your read on this?",
-  "Before we move on, let's hear the other side of the table.",
-  "Good. Now let's hear from you on this.",
-];
-
-const PLANS = [
-  { id: 7, name: "Warm-up", tag: "starter", fee: 199, back: 15, blurb: "One meeting a day. Enough to kill the silence habit." },
-  { id: 14, name: "Placement sprint", tag: "most picked", fee: 349, back: 20, blurb: "Six solo days, a full debate every seventh." },
-  { id: 30, name: "Full season", tag: "for finals", fee: 599, back: 22, blurb: "Rotating formats, harder panels, a weekly report card." },
-];
-const COMMON = new Set(("the be to of and a in that have i it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us is are was were has had did been being am does says great little own under last long very still might must made find here thing world tell ask try need feel become leave put mean keep let begin seem help talk turn start show hear play run move live believe bring happen write sit stand lose pay meet include continue set learn change lead understand watch follow stop create speak read allow add spend grow open walk win offer remember love consider appear buy wait serve die send expect build stay fall cut reach remain suggest raise pass sell require report decide pull yes okay ok maybe really actually basically money job college student india indian company value point issue problem answer question example reason result system data more many much less fewer better best worse worst always never often sometimes today tomorrow yesterday everyone someone nobody everything something nothing").split(" "));
-
-
-/* The everyday vocabulary an Indian undergraduate already owns. Using these
-   well is fine — but it isn't vocabulary *reach*, so they don't score as range. */
-const BASIC = new Set((
-"about above across after again against all almost alone along already also always among angry animal answer any anybody anyone anything anyway anywhere apart appear apple area argue arm around arrive ask attack aunt away baby back bad bag ball bank basic beat beautiful because become bed before begin behind believe below best better between big bird birthday bit black blood blue board boat body book bored born borrow both bottle bottom bought box boy bread break breakfast bring brother brought brown build building burn bus business busy but buy call came camera can cannot car card care careful carry case catch cause centre certain chair chance change cheap check child children choose church city class clean clear climb clock close clothes cloud coffee cold college colour come comfortable common company complete computer condition control cook cool copy corner correct cost could country couple course cover crazy create cross cry cup cut dance danger dark date daughter day dead deal dear decide deep depend describe desk detail did die difference different difficult dinner direction dirty discuss do doctor dog done door double doubt down draw dream dress drink drive drop dry during each ear early earth easy eat egg eight either else empty end enjoy enough enter equal especially even evening ever every everybody everyone everything everywhere exact example except excited expect experience explain eye face fact fail fall family famous far fast father fear feel feet few field fight fill film final find fine finger finish fire first fish five fix floor flower fly follow food foot for force forget form found four free fresh friend from front fruit full fun funny future game garden gave general get gift girl give glad glass go god gold gone good got grade great green ground group grow guess guy had hair half hand happen happy hard has hat hate have head health hear heart heavy help her here hers high hill him himself his hit hold hole holiday home honest honestly hope hospital hot hotel hour house how however huge human hundred hungry hurry hurt idea if ill imagine important improve in inside instead interest into introduce it its itself job join joke journey just keep key kid kill kind king kitchen knew know lady land language large last late later laugh law lead learn leave left leg less lesson let letter level library lie life light like line list listen little live local long look lose lost lot loud love low luck lunch machine made magazine main make man many map market marry match matter may maybe me meal mean meat medicine meet member memory men message met middle might mile milk mind mine minute miss mistake mix modern moment money month moon more morning most mother mountain mouth move movie much music must my myself name near nearly necessary need neighbour neither never new news next nice night nine no nobody noise none nor normal north nose not note nothing notice now number obviously ocean of off offer office often oil okay old on once one only open opinion or orange order other our out outside over own page paint pair paper parent park part party pass past pay peace pen pencil people perfect perhaps period person phone photo pick picture piece place plan plant play please pocket point police poor popular position possible post pot power practice prepare present press pretty price print probably problem process produce program promise proper properly protect proud public pull purpose push put quarter question quick quiet quite radio rain raise rather reach read ready real realise really reason receive recent record red remember remove repeat reply report rest result return rich ride right ring rise river road rock room round rule run sad safe said sale same sat save saw say school science sea season seat second see seem sell send sense sentence separate serious serve service set seven several shall shape share sharp she ship shoe shop short should shoulder shout show shut sick side sign silent silver similar simple since sing single sir sister sit six size skill skin sky sleep slow small smell smile smoke snow so soft some somebody somehow someone something sometimes somewhere son song soon sorry sort sound soup south space speak special speed spell spend sport spring stand star start state station stay step stick still stone stop store story straight strange street strong student study stuff stupid subject succeed such sudden suddenly sugar suggest summer sun supper suppose sure surprise sweet swim table take talk tall taste teach teacher team tell ten test than thank that the their them themselves then there these they thick thin thing think third this those though thought three through throw thus ticket tie time tired to today together told tomorrow tonight too took top total touch toward town train travel tree trip trouble true trust try turn twice two type ugly uncle under understand until up upon us use useful usual usually very village visit voice wait wake walk wall want war warm was wash watch water way we wear weather week weight welcome well went were west wet what when where whether which while white who whole whom whose why wide wife will win wind window wine winter wish with within without woman women wonder wood word work world worry worse worst would write wrong year yellow yes yesterday yet you young your yourself"
-).split(" "));
-
-/* Suffixes that mark the register a panel notices. */
-const ACADEMIC = /(tion|sion|ment|ity|ance|ence|ive|ous|ate|ise|ize|able|ible|ism|ist|logy|graphy|cracy|ary|ory)$/;
-
-const HEDGES = ["kind of", "sort of", "i guess", "i suppose", "maybe", "i think", "probably", "perhaps", "somewhat", "a bit", "a little bit", "i feel like", "or something", "i mean"];
-const HARD_FILLERS = ["um", "uh", "erm", "uhh", "umm", "hmm", "er", "ah", "you know", "matlab"];
-const SOFT_FILLERS = ["like", "actually", "basically", "literally", "so", "well", "right", "okay", "yeah", "just", "na"];
-// the actual non-lexical sounds the Ah-Counter role is named for — everything
-// else findFillers tags "filler" (you know, matlab, like, so...) is a crutch
-// word, not a hesitation sound, and gets shown as its own group
-const AH_SOUNDS = new Set(["um", "umm", "uh", "uhh", "erm", "er", "hmm", "ah"]);
-
-const STANCE = ["i think", "i believe", "in my view", "in my opinion", "i'd argue", "i would argue", "my view is", "i disagree", "i agree", "the answer is", "yes", "no", "personally"];
-const CONNECT = ["because", "however", "although", "whereas", "therefore", "for example", "for instance", "on the other hand", "that said", "but", "which means", "as a result", "in contrast", "firstly", "secondly", "moreover"];
-const CLOSERS = ["so overall", "to conclude", "in conclusion", "that's why", "in short", "so my point is", "to sum up", "ultimately", "so the answer", "which is why"];
 
 /* -- word sanity -------------------------------------------------------- */
 
@@ -1853,9 +1661,15 @@ function wordOfTheDay(custom) {
   return deck[seed % deck.length];
 }
 
+/* Loose stem match, so "nuanced" and "nuances" both count for "nuance" — a
+   speaker who inflected the word correctly did use it, and being told
+   otherwise would read as a bug. */
 function usedWord(word, text) {
-  const stem = word.toLowerCase().slice(0, Math.max(4, word.length - 4));
-  return new RegExp("\\b" + stem, "i").test(text || "");
+  if (!word || !text) return false;
+  const w = String(word).toLowerCase().replace(/[^a-z]/g, "");
+  if (w.length < 3) return false;
+  const stem = w.length > 5 ? w.slice(0, Math.max(4, w.length - 3)) : w.replace(/e$/, "");
+  return new RegExp("\\b" + stem, "i").test(text);
 }
 
 function renderMarked(text, fillers) {
@@ -2025,9 +1839,10 @@ async function groqTranscribe(blob) {
 /** The evaluating AI — commends, recommends, judges vocab usage, plays the
  *  panel roles, and so on. Same JSON-in, JSON-out contract as
  *  askClaude so every existing call site keeps working unchanged. */
-// Groq's small instruct model: far lower latency than the 70B default, and on
-// the same free tier. Good enough for drafting a brief, not for evaluation.
-const GROQ_FAST_MODEL = "llama-3.1-8b-instant";
+/* The brief's model. gpt-oss-20b is quicker but drops whole fields from the
+   brief often enough to be unusable, so the brief stays on the 120b and buys
+   its speed from `reasoning_effort: low` on the server instead. */
+const GROQ_FAST_MODEL = "openai/gpt-oss-120b";
 
 async function groqChat(system, user, maxTokens = 900, model) {
   // never let a stalled request hang the UI forever — the caller has an
@@ -2995,6 +2810,39 @@ function Grass({ level, live }) {
 }
 
 const RECORDING_SCREEN_CSS = `
+/* ---- timing lights ---- */
+/* A single pill in two segments: the clock, and — once the speaker passes the
+   green mark — an attached light. Before green there is no light at all; a
+   colour from second zero would train people to ignore it. */
+.rec-timer{display:inline-flex;align-items:stretch;margin-top:12px;border-radius:999px;
+  background:rgba(255,255,255,.5);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:0 4px 14px rgba(31,79,91,.10),inset 0 0 0 1px rgba(255,255,255,.6);
+  overflow:hidden;transition:box-shadow .4s}
+.rec-timer.on{box-shadow:0 6px 20px rgba(var(--lg),.30),inset 0 0 0 1px rgba(255,255,255,.55)}
+
+.rec-clock{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;
+  font-family:var(--bod);font-size:13px;color:var(--ocean-deep);
+  transition:background .45s,color .45s}
+.rec-clock b{font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.rec-clock i{font-style:normal;font-weight:600;opacity:.65}
+/* the clock itself tints only faintly — the light segment carries the signal */
+.rec-timer.on .rec-clock{background:rgba(var(--lg),.16);color:var(--lc)}
+
+.rec-light{display:inline-flex;align-items:center;gap:7px;padding:8px 15px 8px 12px;
+  background:var(--lc);color:#fff;
+  font-family:var(--bod);font-weight:800;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  white-space:nowrap;animation:recLightIn .4s cubic-bezier(.2,.9,.3,1) both}
+.rec-dot{width:7px;height:7px;border-radius:50%;background:#fff;flex:none;
+  box-shadow:0 0 0 3px rgba(255,255,255,.3);animation:recDot 1.6s ease-in-out infinite}
+.rec-timer[data-light="red"] .rec-light{animation:recLightIn .4s cubic-bezier(.2,.9,.3,1) both,recRed 1s ease-in-out infinite .4s}
+
+@keyframes recLightIn{from{opacity:0;clip-path:inset(0 100% 0 0)}to{opacity:1;clip-path:inset(0 0 0 0)}}
+@keyframes recDot{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes recRed{0%,100%{filter:brightness(1)}50%{filter:brightness(1.22)}}
+@media (prefers-reduced-motion:reduce){
+  .rec-light,.rec-dot,.rec-timer[data-light="red"] .rec-light{animation:none}
+}
+
 @keyframes recBarPulse{0%,100%{opacity:.85}50%{opacity:1}}
 @keyframes recDotPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.18);opacity:.7}}
 @keyframes recButtonRing{0%{box-shadow:0 0 0 0 rgba(255,255,255,.55)}100%{box-shadow:0 0 0 22px rgba(255,255,255,0)}}
@@ -3017,9 +2865,22 @@ const ANALYZING_SCREEN_CSS = `
 /* Full-screen "on air" recording view — background photo is the whole UI,
    controls float on top. Shared by Table Topics and Debate; Vocabulary's
    inline flip-card recorder is a different, smaller surface. */
-function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stopLabel = "Finish speech" }) {
+function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stopLabel = "Finish speech", slot }) {
   const level = mic?.level || [];
   const speaking = !!mic?.speaking;
+
+  /* Toastmasters timing lights. The thresholds already live on the slot; this
+     just surfaces them while the speaker is actually talking, which is the
+     only moment they are useful. Before green there is no light at all —
+     a colour from second zero would train people to ignore it. */
+  const lightFor = (t) => {
+    if (!slot) return null;
+    if (t >= slot.red) return { key: "red", label: "Wrap up now", c: "#E8674A", glow: "232,103,74" };
+    if (t >= slot.amber) return { key: "amber", label: "Start closing", c: "#C99A4B", glow: "201,154,75" };
+    if (t >= slot.green) return { key: "green", label: "In the zone", c: "#4E9E6A", glow: "78,158,106" };
+    return null;
+  };
+  const light = lightFor(elapsed);
   // Signal to YapApp that we're in recording mode so it can swap the background
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -3044,9 +2905,24 @@ function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stop
 
         <div className="mt-2 text-center">
           <h1 className="m-0 font-[var(--dis)] text-[26px] italic font-semibold text-deep-ocean">{title}</h1>
-          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/45 px-3.5 py-1.5 text-[13px] font-bold text-deep-ocean backdrop-blur-sm">
-            <ClockIcon className="h-3.5 w-3.5" />
-            {fmt(elapsed)}{totalLabel ? <span className="font-medium opacity-70"> of {totalLabel}</span> : null}
+          {/* one pill: the clock, then the timing light as an attached segment,
+              so the two never collide the way two inline siblings did */}
+          <div
+            className={"rec-timer" + (light ? " on" : "")}
+            style={light ? { "--lc": light.c, "--lg": light.glow } : undefined}
+            data-light={light ? light.key : "none"}
+          >
+            <span className="rec-clock">
+              <ClockIcon className="h-3.5 w-3.5" />
+              <b>{fmt(elapsed)}</b>
+              {totalLabel ? <i>of {totalLabel}</i> : null}
+            </span>
+            {light && (
+              <span className="rec-light">
+                <span className="rec-dot" />
+                {light.label}
+              </span>
+            )}
           </div>
         </div>
 
@@ -3407,17 +3283,12 @@ const BEACH_CSS = `
 .ba-bird{ position:absolute; color:rgba(31,79,91,.32); font-size:11px; animation:baBird 16s linear infinite; }
 .ba-bird1{ top:19%; left:18%; animation-delay:0s; }
 .ba-bird2{ top:25%; left:33%; animation-delay:5s; }
-.ba-wave{ position:absolute; bottom:0; left:0; width:220%; height:70px; color:rgba(10,158,196,.12); }
-.ba-wave1{ animation:baWaveDrift 11s linear infinite alternate; }
-.ba-wave2{ color:rgba(111,215,240,.2); height:46px; animation:baWaveDrift 7.5s linear infinite alternate reverse; }
-.ba-foam{ position:absolute; inset-inline:0; bottom:0; height:14px; background:linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,.8)); }
 @keyframes baGlow{ 0%,100%{ opacity:.7; } 50%{ opacity:1; } }
 @keyframes baFloat{ 0%{ transform:translateX(0); } 100%{ transform:translateX(180vw); } }
 @keyframes baBobble{ 0%,100%{ margin-top:0; } 50%{ margin-top:6px; } }
 @keyframes baBird{ 0%{ transform:translate(0,0); } 100%{ transform:translate(40vw,-10px); } }
-@keyframes baWaveDrift{ 0%{ transform:translateX(0); } 100%{ transform:translateX(-20%); } }
 @media (prefers-reduced-motion: reduce){
-  .ba-sun,.ba-cloud,.ba-bird,.ba-wave{ animation:none; }
+  .ba-sun,.ba-cloud,.ba-bird{ animation:none; }
   .ba-cloud1{ left:8%; } .ba-cloud2{ left:52%; } .ba-cloud3{ left:30%; }
 }
 `;
@@ -3433,9 +3304,6 @@ function BeachAmbient() {
       <div className="ba-island" />
       <span className="ba-bird ba-bird1">〜</span>
       <span className="ba-bird ba-bird2">〜</span>
-      <svg className="ba-wave ba-wave1" viewBox="0 0 800 80" preserveAspectRatio="none"><path d="M0,40 C100,10 200,60 300,40 C400,20 500,60 600,40 C700,20 800,50 800,40 L800,80 L0,80 Z" fill="currentColor" /></svg>
-      <svg className="ba-wave ba-wave2" viewBox="0 0 800 80" preserveAspectRatio="none"><path d="M0,50 C100,30 200,60 300,45 C400,30 500,65 600,45 C700,25 800,55 800,45 L800,80 L0,80 Z" fill="currentColor" /></svg>
-      <div className="ba-foam" />
     </div>
   );
 }
@@ -3444,41 +3312,64 @@ function BeachAmbient() {
    sub-scores as pills, and a gate into the card deck. Every value comes from
    the same `r` object the deck cards read — nothing here is recomputed. */
 const REVEAL_CSS = `
-.rv{ position:relative; z-index:1; padding:26px 20px 30px; text-align:center; margin-bottom:24px;
-  background:rgba(255,253,248,.9); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-  border:1px solid rgba(255,255,255,.6); border-radius:32px; box-shadow:0 20px 46px rgba(31,79,91,.14);
+/* The reveal is two stacked cards: a gradient hero carrying the one number,
+   and a plain white list carrying the six measures. Keeping them separate
+   stops the sub-scores competing with the headline figure. */
+.rv{ position:relative; z-index:1; margin-bottom:24px;
   animation:cardin .5s cubic-bezier(.2,.9,.3,1) both; }
-.rv-ring-wrap{ position:relative; width:224px; height:224px; margin:6px auto 0;
+
+/* ---- hero ---- */
+.rv-hero{ position:relative; overflow:hidden; border-radius:28px; padding:26px 24px 30px; text-align:center;
+  background:linear-gradient(168deg,#4E9BB8 0%,#5FAECB 42%,#8FCFE0 100%);
+  box-shadow:0 20px 46px rgba(31,79,91,.20);
   animation:rvRise .7s cubic-bezier(.22,1,.36,1) both; }
-.rv-ring{ width:100%; height:100%; transform:rotate(-90deg); }
-.rv-ring .rv-track{ fill:none; stroke:rgba(31,79,91,.09); stroke-width:14; }
-.rv-ring .rv-fill{ fill:none; stroke:url(#rvGrad); stroke-width:14; stroke-linecap:round;
-  transition:stroke-dashoffset 1.5s cubic-bezier(.2,.8,.3,1); filter:drop-shadow(0 3px 10px rgba(10,158,196,.35)); }
-.rv-center{ position:absolute; inset:0; display:grid; place-content:center; gap:0; }
-.rv-num{ font-family:var(--dis); font-weight:800; font-size:66px; line-height:1; letter-spacing:-.03em; color:var(--ink);
+.rv-eye{ font-family:var(--bod); font-weight:800; font-size:11.5px; letter-spacing:.2em; text-transform:uppercase;
+  color:rgba(255,255,255,.82); }
+.rv-big{ display:flex; align-items:baseline; justify-content:center; gap:6px; margin-top:10px; }
+.rv-big b{ font-family:var(--dis); font-weight:800; font-size:clamp(62px,17vw,86px); line-height:.95;
+  letter-spacing:-.04em; color:#fff; font-variant-numeric:tabular-nums;
+  text-shadow:0 6px 22px rgba(16,64,80,.30); }
+.rv-big i{ font-style:normal; font-family:var(--bod); font-weight:700; font-size:19px; color:rgba(255,255,255,.85); }
+.rv-meter{ height:9px; border-radius:999px; background:rgba(255,255,255,.28); overflow:hidden; margin:18px 4px 0; }
+.rv-meter span{ display:block; height:100%; border-radius:999px;
+  transition:width 1.4s cubic-bezier(.2,.8,.3,1) .25s; box-shadow:0 0 12px rgba(255,255,255,.45); }
+.rv-verdict{ margin-top:20px; font-family:var(--dis); font-weight:700; font-size:20px; color:#fff;
+  animation:rvFade .5s .9s ease both; }
+.rv-vline{ margin:8px auto 0; max-width:30ch; font-size:14.5px; line-height:1.6; color:rgba(255,255,255,.88);
+  animation:rvFade .5s 1.05s ease both; }
+/* a soft shoreline so the card sits in the scene rather than on top of it */
+.rv-shore{ position:absolute; left:0; right:0; bottom:0; height:34px;
+  background:linear-gradient(180deg,rgba(255,255,255,0),rgba(248,242,231,.85)); }
+
+/* ---- measures ---- */
+.rv-list{ margin-top:14px; padding:6px 18px; border-radius:24px; background:#fff;
+  border:1px solid var(--line); box-shadow:0 14px 34px rgba(31,79,91,.10); }
+.rv-row{ display:flex; align-items:center; gap:13px; padding:15px 0;
+  animation:rvFade .45s cubic-bezier(.2,.9,.3,1) both; }
+.rv-row + .rv-row{ border-top:1px solid var(--line); }
+.rv-ico{ flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+  border:1.5px solid currentColor; background:rgba(255,255,255,.6); }
+.rv-ico svg{ width:17px; height:17px; }
+.rv-rowbody{ flex:1; min-width:0; }
+.rv-rowtop{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:7px; }
+.rv-name{ font-family:var(--bod); font-weight:800; font-size:15px; color:var(--ink); }
+.rv-val b{ font-family:var(--dis); font-weight:800; font-size:17px; color:var(--ink);
   font-variant-numeric:tabular-nums; }
-.rv-outof{ font-size:12.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--ink3); margin-top:6px; }
-.rv-band{ display:inline-flex; align-items:center; gap:7px; margin-top:14px; padding:7px 16px; border-radius:999px;
-  background:var(--sand); border:1px solid var(--line);
-  font-weight:800; font-size:14px; color:var(--ink); animation:rvPop .5s .9s cubic-bezier(.2,1.3,.35,1) both; }
-.rv-turtle{ margin:14px auto 0; animation:rvPop .6s 1.1s cubic-bezier(.2,1.3,.35,1) both; }
-.rv-line{ font-size:15.5px; line-height:1.6; color:var(--ink2); max-width:38ch; margin:14px auto 0;
+.rv-val i{ font-style:normal; font-size:11.5px; font-weight:700; color:var(--ink3); margin-left:2px; }
+.rv-bar{ height:7px; border-radius:999px; background:rgba(31,79,91,.10); overflow:hidden; }
+.rv-bar span{ display:block; height:100%; border-radius:999px;
+  transition:width 1.1s cubic-bezier(.2,.8,.3,1); }
+
+.rv-line{ font-size:14px; line-height:1.6; color:var(--ink2); text-align:center; margin:16px auto 0;
   animation:rvFade .5s 1.25s ease both; }
-.rv-pills{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin:20px auto 0; max-width:400px; }
-.rv-pill{ display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:999px;
-  background:var(--sand); border:1px solid var(--line);
-  font-size:13px; font-weight:700; color:var(--ink2); animation:rvPop .45s cubic-bezier(.2,1.3,.35,1) both; }
-.rv-pill i{ width:8px; height:8px; border-radius:50%; flex:0 0 8px; }
-.rv-pill b{ font-variant-numeric:tabular-nums; color:var(--ink); }
-.rv-cta{ margin-top:26px; animation:rvFade .5s 1.5s ease both; }
+.rv-cta{ margin-top:20px; text-align:center; animation:rvFade .5s 1.5s ease both; }
 .rv-cta .btn{ font-size:16px; padding:15px 30px; }
 .rv-hint{ font-size:12.5px; color:var(--ink3); margin-top:12px; }
-@keyframes rvRise{ from{ opacity:0; transform:translateY(24px) scale(.9); } }
-@keyframes rvPop{ from{ opacity:0; transform:scale(.75); } }
+@keyframes rvRise{ from{ opacity:0; transform:translateY(24px) scale(.94); } }
 @keyframes rvFade{ from{ opacity:0; transform:translateY(8px); } }
 @media (prefers-reduced-motion: reduce){
-  .rv-ring-wrap,.rv-band,.rv-turtle,.rv-line,.rv-pill,.rv-cta{ animation:none; }
-  .rv-ring .rv-fill{ transition:none; }
+  .rv,.rv-hero,.rv-row,.rv-verdict,.rv-vline,.rv-line,.rv-cta{ animation:none; }
+  .rv-meter span,.rv-bar span{ transition:none; }
 }
 `;
 
@@ -3491,13 +3382,27 @@ const bandForScore = (n) =>
   : n >= 30 ? { label: "Needs work", tone: "#E89A4A" }
   : { label: "Early days", tone: "#E8674A" };
 
+/* The headline and the sentence under it. Deliberately plain-spoken: a low
+   score has to read as a starting point, never as a verdict. */
+const verdictForScore = (n) =>
+  n >= 82 ? { head: "Sharp. Really sharp.",
+              line: "That held together start to finish. Keep the bar exactly here." }
+  : n >= 65 ? { head: "Strong. Nearly there.",
+                line: "The shape is right. Tighten one thing and this moves up a band." }
+  : n >= 48 ? { head: "Rough. Good.",
+                line: "Rough is where everyone starts. Good news: only one way up. Go again." }
+  : n >= 30 ? { head: "Loose, but honest.",
+                line: "The ideas are in there. They need an order a listener can follow." }
+  : { head: "Early days.",
+      line: "Everyone sounds like this at first. The next one is already easier." };
+
 function ScoreReveal({ r, onOpen, deckCount }) {
   const [go, setGo] = useState(false);
   const n = useCountUp(r.overall, 1400, go);
   useEffect(() => { const t = setTimeout(() => setGo(true), 220); return () => clearTimeout(t); }, []);
 
   const band = bandForScore(r.overall);
-  const C = 2 * Math.PI * 96;
+  const verdict = verdictForScore(r.overall);
   const parts = [
     ["Structure", r.structure], ["Flow", r.fluency], ["Pace", r.pace],
     ["Range", r.range], ["Grammar", r.accuracy], ["Clarity", r.clarity100],
@@ -3506,42 +3411,237 @@ function ScoreReveal({ r, onOpen, deckCount }) {
   return (
     <div className="rv">
       <style>{REVEAL_CSS}</style>
-      <div className="rv-ring-wrap">
-        <svg className="rv-ring" viewBox="0 0 224 224">
-          <defs>
-            <linearGradient id="rvGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#7EC8E3" /><stop offset="100%" stopColor={band.tone} />
-            </linearGradient>
-          </defs>
-          <circle className="rv-track" cx="112" cy="112" r="96" />
-          <circle className="rv-fill" cx="112" cy="112" r="96"
-            strokeDasharray={C} strokeDashoffset={go ? C * (1 - r.overall / 100) : C} />
-        </svg>
-        <div className="rv-center">
-          <div className="rv-num">{n}</div>
-          <div className="rv-outof">out of 100</div>
+
+      {/* hero: the one number, on its own ground */}
+      <div className="rv-hero">
+        <div className="rv-eye">Deep score</div>
+        <div className="rv-big">
+          <b>{n}</b><i>/100</i>
         </div>
+        <div className="rv-meter">
+          <span style={{ width: go ? `${Math.max(2, r.overall)}%` : "0%", background: band.tone }} />
+        </div>
+        <div className="rv-verdict">{verdict.head}</div>
+        <p className="rv-vline">{verdict.line}</p>
+        <div className="rv-shore" aria-hidden="true" />
       </div>
 
-      <div className="rv-band"><i style={{ width: 9, height: 9, borderRadius: "50%", background: band.tone, display: "inline-block" }} />{band.label}</div>
-
-      <div className="rv-turtle"><Mascot mood={r.wc < 8 ? "shocked" : moodForScore(r.overall)} size={96} /></div>
+      {/* the six measures, as a readable list rather than scattered pills */}
+      <div className="rv-list">
+        {parts.map(([label, v], i) => {
+          const t = bandForScore(v).tone;
+          return (
+            <div className="rv-row" key={label} style={{ animationDelay: `${0.5 + i * 0.07}s` }}>
+              <span className="rv-ico" style={{ color: t, borderColor: t }}>
+                <ScoreGlyph name={label} />
+              </span>
+              <div className="rv-rowbody">
+                <div className="rv-rowtop">
+                  <span className="rv-name">{label}</span>
+                  <span className="rv-val"><b>{v}</b><i>/100</i></span>
+                </div>
+                <div className="rv-bar">
+                  <span style={{ width: go ? `${Math.max(2, v)}%` : "0%", background: t,
+                    transitionDelay: `${0.55 + i * 0.07}s` }} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       <p className="rv-line">{r.wpm} words a minute · {r.fillerCount} filler{r.fillerCount === 1 ? "" : "s"} · {r.variety}% word variety</p>
-
-      <div className="rv-pills">
-        {parts.map(([label, v], i) => (
-          <span className="rv-pill" key={label} style={{ animationDelay: `${1.15 + i * 0.07}s` }}>
-            <i style={{ background: bandForScore(v).tone }} />
-            {label} <b>{v}</b>
-          </span>
-        ))}
-      </div>
 
       <div className="rv-cta">
         <button className="btn go" onClick={onOpen}>See the full breakdown →</button>
         <div className="rv-hint">{deckCount} cards from the Timer, Ah-Counter, Grammarian and Evaluator</div>
       </div>
+    </div>
+  );
+}
+
+/* One glyph per measure. Line art rather than emoji, so the list stays quiet. */
+function ScoreGlyph({ name }) {
+  const p = {
+    Structure: <><rect x="4" y="4" width="16" height="5" rx="1.5" /><rect x="4" y="12" width="16" height="8" rx="1.5" /></>,
+    Flow: <path d="M3 15c3-6 6 6 9 0s6-6 9 0" />,
+    Pace: <><circle cx="12" cy="12" r="8" /><path d="M12 7.5V12l3 2" /></>,
+    Range: <><path d="M4 18V9M9 18V5M14 18v-7M19 18v-4" /></>,
+    Grammar: <><path d="M5 19l5.5-14h3L19 19" /><path d="M8 14h8" /></>,
+    Clarity: <><circle cx="12" cy="10" r="4.5" /><path d="M10 18.5h4M10.5 21h3" /></>,
+  }[name] || <circle cx="12" cy="12" r="7" />;
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{p}</svg>
+  );
+}
+
+/* Word of the day, checked against what was actually said. On a miss it shows
+   the word's own example sentence — the point is to make the word usable next
+   time, not to mark the speaker down for missing it. */
+function WotdCard({ wotd, used }) {
+  return (
+    <div className={"card pcard " + (used ? "moss" : "sun")} key="wotd">
+      <style>{WOTD_CSS}</style>
+      <CornerDecor emoji={used ? "🏆" : "📖"} />
+      <SpeechBubbleHeader
+        label="Word of the day"
+        sub={used ? "You used it" : "Not used this time"}
+      />
+      <div className="wotd-word">
+        <b>{wotd.w}</b>
+        <span>{wotd.p}</span>
+      </div>
+      <p className="wotd-def">{wotd.d}</p>
+
+      {used ? (
+        <p className="wotd-note ok">
+          You worked <b>{wotd.w.toLowerCase()}</b> into your answer — that is exactly how a word
+          moves from something you recognise to something you own.
+        </p>
+      ) : (
+        <>
+          <div className="eye" style={{ marginTop: 14 }}>How you could have used it</div>
+          <p className="wotd-eg">&ldquo;{wotd.e}&rdquo;</p>
+          <p className="wotd-note">
+            No score is affected by this. Try dropping it into your next answer while it is fresh.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+const WOTD_CSS = `
+.wotd-word{display:flex;align-items:baseline;gap:9px;margin-top:4px}
+.wotd-word b{font-family:var(--dis);font-weight:800;font-size:26px;letter-spacing:-.01em;color:var(--ink)}
+.wotd-word span{font-family:var(--bod);font-weight:700;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink3)}
+.wotd-def{font-size:15px;line-height:1.6;color:var(--ink2);margin:6px 0 0}
+.wotd-eg{font-family:var(--dis);font-weight:600;font-size:17px;line-height:1.55;color:var(--ink);
+  margin:8px 0 0;padding-left:14px;border-left:3px solid var(--ocean)}
+.wotd-note{font-size:13.5px;line-height:1.6;color:var(--ink3);margin:12px 0 0}
+.wotd-note.ok{color:var(--ink2)}
+.wotd-note b{color:var(--ink);font-weight:700}
+`;
+
+/* ==========================================================================
+   REPORT VISUALS
+   A shared kit so every card in the deck is built from the same parts: a
+   headline stat strip, a "fix this one thing" banner, and small charts that
+   put the measured numbers on screen instead of describing them in prose.
+   ========================================================================== */
+
+const RPT_CSS = `
+/* the single most useful line on any card: what to change next time */
+.fixit{display:flex;gap:12px;align-items:flex-start;margin-top:16px;padding:14px 15px;border-radius:18px;
+  background:linear-gradient(140deg,rgba(242,193,78,.20),rgba(242,193,78,.07));
+  border:1px solid rgba(242,193,78,.55)}
+.fixit-ico{flex:none;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;
+  background:#F2C14E;color:#5B4212;font-weight:900;font-size:14px}
+.fixit b{display:block;font-family:var(--bod);font-weight:800;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink3);margin-bottom:4px}
+.fixit p{margin:0;font-size:14.5px;line-height:1.6;color:var(--ink)}
+
+/* headline numbers, read before any sentence is */
+.statstrip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;margin:2px 0 14px;
+  border-radius:16px;overflow:hidden;background:rgba(31,79,91,.07)}
+.statstrip > div{background:rgba(255,255,255,.72);padding:12px 8px;text-align:center}
+.statstrip b{display:block;font-family:var(--dis);font-weight:800;font-size:23px;line-height:1;
+  color:var(--ink);font-variant-numeric:tabular-nums}
+.statstrip b.ok{color:#4E9E6A} .statstrip b.warn{color:#C99A4B} .statstrip b.bad{color:#E8674A}
+.statstrip span{display:block;margin-top:5px;font-size:9.5px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink3)}
+
+/* where the speech actually sat against green / amber / red */
+.tl{position:relative;height:38px;margin:6px 0 4px}
+.tl-track{position:absolute;inset:14px 0 auto;height:10px;border-radius:999px;overflow:hidden;display:flex}
+.tl-track i{height:100%}
+.tl-you{position:absolute;top:6px;width:3px;height:26px;border-radius:2px;background:var(--ink);
+  box-shadow:0 0 0 3px rgba(255,255,255,.9)}
+.tl-you::after{content:attr(data-at);position:absolute;top:-16px;left:50%;transform:translateX(-50%);
+  font-family:var(--bod);font-weight:800;font-size:10.5px;color:var(--ink);white-space:nowrap}
+.tl-keys{display:flex;justify-content:space-between;margin-top:2px;font-size:9.5px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+
+/* a word tally that shows relative weight, not just counts */
+.wbars{margin-top:10px}
+.wbar{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.wbar span:first-child{flex:0 0 96px;font-size:13px;font-weight:700;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wbar-t{flex:1;height:8px;border-radius:999px;background:rgba(31,79,91,.09);overflow:hidden}
+.wbar-t i{display:block;height:100%;border-radius:999px;background:var(--wb,#E8674A)}
+.wbar b{flex:none;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink2);min-width:22px;text-align:right}
+`;
+
+/* The one change worth making next time. Every card can end with this, so the
+   speaker always leaves with an instruction rather than a description. */
+function FixIt({ children, label = "Fix this next" }) {
+  if (!children) return null;
+  return (
+    <div className="fixit">
+      <span className="fixit-ico">→</span>
+      <div><b>{label}</b><p>{children}</p></div>
+    </div>
+  );
+}
+
+function StatStrip({ items }) {
+  return (
+    <div className="statstrip">
+      {items.map(([value, label, tone]) => (
+        <div key={label}>
+          <b className={tone || ""}>{value}</b>
+          <span>{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Green / amber / red as an actual bar, with a marker where the speech ended.
+   A speaker can see "I stopped just before green" in one glance. */
+function TimeLine({ seconds, slot }) {
+  const max = Math.max(slot.red * 1.15, seconds * 1.05);
+  const pct = (v) => `${Math.min(100, (v / max) * 100)}%`;
+  return (
+    <div>
+      <div className="tl">
+        <div className="tl-track">
+          <i style={{ width: pct(slot.green), background: "rgba(31,79,91,.14)" }} />
+          <i style={{ width: `calc(${pct(slot.amber)} - ${pct(slot.green)})`, background: "#7BAE8F" }} />
+          <i style={{ width: `calc(${pct(slot.red)} - ${pct(slot.amber)})`, background: "#E3C15F" }} />
+          <i style={{ flex: 1, background: "#E8674A" }} />
+        </div>
+        <span className="tl-you" style={{ left: pct(seconds) }} data-at={fmt(seconds)} />
+      </div>
+      <div className="tl-keys">
+        <span>start</span><span>green {fmt(slot.green)}</span>
+        <span>amber {fmt(slot.amber)}</span><span>red {fmt(slot.red)}</span>
+      </div>
+    </div>
+  );
+}
+
+/* Relative weight beats a bare count: five "basically"s next to one "like"
+   tells you which habit to actually go after. */
+function WordBars({ items, tone = "#E8674A", max: capped = 5 }) {
+  if (!items || !items.length) return null;
+  const top = items.slice(0, capped);
+  const peak = Math.max(...top.map((x) => x[1] || x.n || 0), 1);
+  return (
+    <div className="wbars">
+      {top.map((x) => {
+        const word = x[0] !== undefined ? x[0] : x.word;
+        const n = x[1] !== undefined ? x[1] : x.n;
+        return (
+          <div className="wbar" key={word}>
+            <span>{word}</span>
+            <span className="wbar-t"><i style={{ width: `${(n / peak) * 100}%`, "--wb": tone }} /></span>
+            <b>×{n}</b>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -4523,12 +4623,6 @@ function analyseDebate(text, seconds, mode, stance, lang) {
 
 /* ---- the PREP scaffold, and what to say when the user has no key ---- */
 
-const PREP_FRAME = [
-  { k: "P", label: "Point", ask: "One sentence. What is your position?" },
-  { k: "R", label: "Reason", ask: "Why? The mechanism, not the slogan." },
-  { k: "E", label: "Example", ask: "One concrete case, ideally with a number." },
-  { k: "P", label: "Point", ask: "Say the position again, sharpened by what you just proved." },
-];
 
 /* A usable brief with no API key. Generic by necessity, but it is a real
    scaffold rather than a placeholder that shrugs. */
@@ -4669,19 +4763,7 @@ const DEBATE_CSS = `
 .prepbig{font-family:var(--bod);font-weight:800;font-size:clamp(46px,14vw,80px);text-align:center;
   letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;color:var(--ink)}
 .prepbig.low{color:var(--bad)}
-.frame{border:1px solid var(--line);border-radius:20px;overflow:hidden;margin-top:14px;background:var(--surf1)}
-.framerow{display:flex;gap:12px;padding:14px 16px;border-bottom:1px dashed var(--line);align-items:flex-start}
-.framerow:last-child{border-bottom:none}
-.framekey{flex:0 0 30px;height:30px;border-radius:11px;border:1px solid var(--line);display:grid;
-  place-items:center;font-family:var(--dis);font-weight:700;font-size:14px;background:var(--sand)}
-.framerow[data-filled="1"] .framekey{background:var(--good);border-color:var(--good);color:#fff}
-.framebody{flex:1;min-width:0}
-.framebody b{display:block;font-size:14px;margin-bottom:2px;color:var(--ink)}
-.framebody small{font-size:12px;color:var(--ink3);line-height:1.5;display:block}
-.framebody textarea{width:100%;background:var(--sand);border:1px solid var(--line);border-radius:14px;
-  color:var(--ink);font-family:var(--bod);font-size:14.5px;line-height:1.55;padding:9px 11px;
   resize:vertical;margin-top:8px}
-.framebody textarea:focus{outline:none;border-color:var(--ocean);box-shadow:0 0 0 3px rgba(126,200,227,.16)}
 .brief li{font-size:14.5px;line-height:1.6;margin-bottom:7px;color:var(--ink2)}
 
 /* ---- research brief ---- */
@@ -4752,7 +4834,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
   const briefTimers = useRef([]);
   const [prepChoice, setPrepChoice] = useState(60);
   const [customPrep, setCustomPrep] = useState(90);
-  const [notes, setNotes] = useState(["", "", "", ""]);
   const [slotId, setSlotId] = useState(120);
   const [mode, setMode] = useState("mic");
   const [typed, setTyped] = useState("");
@@ -4765,7 +4846,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
   const prepSeconds = prepChoice === 0 ? Math.max(10, Math.min(600, customPrep)) : prepChoice;
   const typedRef = useRef(""); typedRef.current = typed;
   const modeRef = useRef("mic"); modeRef.current = mode;
-  const notesRef = useRef(notes); notesRef.current = notes;
 
   /* ---- prep countdown ---- */
   const prep = useStopwatch(prepSeconds, () => setStage("speak"));
@@ -4789,7 +4869,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     setAiState("loading");
     askClaude(DEBATE_EVAL_SYS,
       `Motion: "${topic}"\nThey argued: ${stanceById(stance).label}\nPrep time: ${prepSeconds}s\n` +
-      `Their notes: ${notesRef.current.filter(Boolean).join(" | ") || "(none written)"}\n` +
       `Measured: stance consistency ${r.consistency.score}, evidence ${r.evidence}, ` +
       `counterargument ${r.counter}, argument ${r.argument}, words ${r.wc}.\n` +
       `Transcript:\n"""${text}"""`, 900)
@@ -4867,11 +4946,10 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     briefTimers.current.forEach((t) => { clearInterval(t); clearTimeout(t); });
     briefTimers.current = [];
     setStage("stance"); setStance(null); setBrief(null); setBriefState("idle"); setBriefLeft(0);
-    setNotes(["", "", "", ""]); setRep(null); setAi(null); setAiState("idle");
+    setRep(null); setAi(null); setAiState("idle");
     prep.reset(); watch.reset();
   };
 
-  const setNote = (i, v) => setNotes((n) => n.map((x, k) => (k === i ? v : x)));
 
   const spinMotion = (pool) => {
     if (spinning) return;
@@ -4981,12 +5059,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
 
         {brief && (
           <>
-            {briefState === "local" && (
-              <div className="tip" style={{ marginBottom: 14 }}>
-                No research key connected, so this is the shape of a strong case rather than
-                researched material. Everything else in this mode works exactly the same.
-              </div>
-            )}
             <div className="bsheet">
             <div className="bthesis">
               <span className="btit">What this is really about</span>
@@ -5147,54 +5219,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
                 Arguing <b style={{ color: st.colour }}>{st.label}</b> · {topic}
               </p>
             </div>
-
-            <div className="card">
-              <div className="role">
-                <div className="rbadge"><Mascot mood="thinking" size={46} /></div>
-                <div><div className="rname">Structure it</div>
-                  <div className="rrole">point · reason · example · point</div></div>
-              </div>
-              <p className="ex" style={{ marginBottom: 4 }}>
-                Notes are for you — nothing here is scored. Speakers who write one line per box
-                almost always beat speakers who write paragraphs.
-              </p>
-              <div className="frame">
-                {PREP_FRAME.map((row, i) => (
-                  <div className="framerow" key={i} data-filled={notes[i].trim() ? "1" : "0"}>
-                    <div className="framekey">{row.k}</div>
-                    <div className="framebody">
-                      <b>{row.label}</b>
-                      <small>{row.ask}</small>
-                      <textarea rows={i === 2 ? 2 : 1} value={notes[i]}
-                        onChange={(e) => setNote(i, e.target.value)}
-                        placeholder={i === 0 && stance
-                          ? `I am ${st.verb} this because…`
-                          : ""} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {brief && (brief.points || []).length > 0 && (
-                <>
-                  <div className="eye" style={{ marginTop: 16 }}>From your brief — tap to drop into Reason</div>
-                  <div className="row" style={{ marginTop: 8 }}>
-                    {brief.points.slice(0, 4).map((pt, i) => (
-                      <button key={i} className="chip" style={{ textAlign: "left", maxWidth: "100%" }}
-                        onClick={() => setNote(1, (notes[1] ? notes[1] + " " : "") + pt)}>
-                        {pt.length > 58 ? pt.slice(0, 56) + "…" : pt}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              <div className="row" style={{ marginTop: 16 }}>
-                <button className="btn leaf" onClick={() => { prep.stop(); setStage("speak"); }}>
-                  Ready early
-                </button>
-              </div>
-            </div>
           </>
         )}
       </div>
@@ -5211,23 +5235,6 @@ function DebateMode({ mic, onFinish, lib, profile }) {
           <div className="card" style={{ borderColor: st.colour }}>
             <span className="pill" style={{ color: st.colour, borderColor: st.colour }}>Arguing {st.label}</span>
             <div className="topic" style={{ minHeight: "auto", fontSize: 20 }}>{topic}</div>
-          </div>
-        )}
-
-        {notes.some((n) => n.trim()) && !live && (
-          <div className="card">
-            <div className="eye">Your plan — last look</div>
-            <div className="frame">
-              {PREP_FRAME.map((row, i) => notes[i].trim() ? (
-                <div className="framerow" key={i} data-filled="1">
-                  <div className="framekey">{row.k}</div>
-                  <div className="framebody"><b>{row.label}</b><small style={{ color: "var(--ink)", fontSize: 14.5 }}>{notes[i]}</small></div>
-                </div>
-              ) : null)}
-            </div>
-            <p className="ex" style={{ marginTop: 10 }}>
-              These disappear when you start. Reading notes aloud is not the skill being trained.
-            </p>
           </div>
         )}
 
@@ -5250,6 +5257,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
             onStop={() => finish()}
             onBack={() => { mic.stop(); watch.stop(); watch.reset(); setStage("speak"); }}
             stopLabel="Finish"
+            slot={slot}
           />
         )}
       </div>
@@ -5466,10 +5474,11 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
     r.clip = mic.clip;
     const tRep = timerReport(secs, slot);
     const aRep = ahReport(r);
-    const gRep = gramReport(r, null, false);
+    const usedW = usedWord(wotd && wotd.w, text);
+    const gRep = gramReport(r, wotd, usedW);
     const eRep = evalReport(r, tRep);
 
-    setRep({ r, tRep, aRep, gRep, eRep, usedW: false, slot });
+    setRep({ r, tRep, aRep, gRep, eRep, usedW, slot, wotd });
     setPhase("analyzing");
     setPetals(true); setTimeout(() => setPetals(false), 3400);
     onFinish({ xp: 30 + Math.round(r.overall / 2), seconds: secs, kind: "topic" });
@@ -5480,7 +5489,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
       .then((j) => { setAi(j); setAiState("done"); })
       .catch(() => setAiState("offline"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mic, topic, slot, onFinish]);
+  }, [mic, topic, slot, onFinish, wotd]);
 
   const watch = useStopwatch(slot.red + 30, finish);
 
@@ -5528,45 +5537,87 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
 
     cards.push(
       <div className="card sun pcard" key="timer">
+        <style>{RPT_CSS}</style>
         <CornerDecor emoji="⏳" />
         <RoleHead role={ROLES[0]} />
         <div className={"clock" + (r.seconds > rep.slot.red ? " over" : "")}>{fmt(r.seconds)}</div>
-        <Signal elapsed={r.seconds} slot={rep.slot} />
-        <div className="verdict {tRep.vclass}" style={{ display: "none" }} />
-        <div style={{ textAlign: "center" }}>
+        <div style={{ textAlign: "center", marginBottom: 10 }}>
           <span className={"verdict " + tRep.vclass}>
             {tRep.verdict === "qualified" ? "qualifies" : tRep.verdict === "under" ? "under time" : "over time"}
           </span>
         </div>
+        <TimeLine seconds={r.seconds} slot={rep.slot} />
+        <StatStrip items={[
+          [fmt(r.seconds), "Spoke", tRep.verdict === "qualified" ? "ok" : "warn"],
+          [r.mode === "mic" ? `${Math.max(0, r.seconds - r.voiced)}s` : "—", "Silence",
+            r.mode === "mic" && (r.seconds - r.voiced) > 8 ? "warn" : "ok"],
+          [`${r.wpm}`, "Words/min", r.wpm > 170 || r.wpm < 110 ? "warn" : "ok"],
+        ]} />
         <p style={{ fontSize: 15, lineHeight: 1.65, marginBottom: 0 }}>{tRep.line}</p>
+        <FixIt>
+          {tRep.verdict === "under"
+            ? `Aim to still be talking at ${fmt(rep.slot.green)}. Take your first idea and add one reason and one example to it — that alone is usually ${Math.max(10, rep.slot.green - r.seconds)}s more.`
+            : tRep.verdict === "over"
+              ? `Start closing the moment you hit ${fmt(rep.slot.amber)}. Pick your last sentence now: one line that restates your position, nothing new.`
+              : `You landed in the window. Next time hold the same shape but cut one sentence you did not need — control is what gets noticed.`}
+        </FixIt>
       </div>
     );
 
     cards.push(
       <div className="card coral pcard" key="ah">
+        <style>{RPT_CSS}</style>
         <CornerDecor emoji="🐚" />
         <RoleHead role={ROLES[1]} />
         <ThumbsBadge ok={aRep.soundPer < 3 && aRep.crutchTotal <= 2} />
-        <AhCounterBody a={aRep} extra={r.stumbles.length > 0 && (
-          <p className="ex" style={{ marginTop: 10 }}>
-            Also {r.stumbles.length} restart{r.stumbles.length === 1 ? "" : "s"} — “{r.stumbles[0].phrase}”. That's the sound of a sentence being rebuilt mid-air.
+        <StatStrip items={[
+          [aRep.soundTotal, "Ah · um · uh", aRep.soundPer < 3 ? "ok" : aRep.soundPer < 6 ? "warn" : "bad"],
+          [aRep.crutchTotal, "Crutch words", aRep.crutchTotal <= 2 ? "ok" : "warn"],
+          [r.stumbles.length, "Restarts", r.stumbles.length === 0 ? "ok" : "warn"],
+        ]} />
+        <p style={{ fontSize: 15, lineHeight: 1.65 }}>{aRep.line}</p>
+        {aRep.sounds.length > 0 && (
+          <>
+            <div className="eye" style={{ marginTop: 14 }}>Which sounds, and how often</div>
+            <WordBars items={aRep.sounds} tone="#E8674A" />
+          </>
+        )}
+        {aRep.crutches.length > 0 && (
+          <>
+            <div className="eye" style={{ marginTop: 14 }}>Crutch phrases</div>
+            <WordBars items={aRep.crutches} tone="#C99A4B" />
+          </>
+        )}
+        {r.stumbles.length > 0 && (
+          <p className="ex" style={{ marginTop: 12 }}>
+            {r.stumbles.length} restart{r.stumbles.length === 1 ? "" : "s"} — &ldquo;{r.stumbles[0].phrase}&rdquo;.
+            That is a sentence being rebuilt mid-air.
           </p>
-        )} />
+        )}
+        <FixIt>
+          {aRep.soundTotal === 0 && aRep.crutchTotal <= 2
+            ? "Nothing to strip out here. Keep pausing where you were pausing — silence is doing the work fillers usually do."
+            : `Replace the ${aRep.sounds.length ? `"${aRep.sounds[0][0]}"` : "filler"} with a closed mouth and a two-count. A pause sounds deliberate; a filler sounds unfinished. Record the same answer once more and only count that one habit.`}
+        </FixIt>
       </div>
     );
 
     cards.push(
       <div className="card moss pcard" key="gram">
+        <style>{RPT_CSS}</style>
         <SailDecor />
         <RoleHead role={ROLES[2]} />
+        <StatStrip items={[
+          [gRep.errs.length, "Grammar slips", gRep.errs.length === 0 ? "ok" : gRep.errs.length <= 2 ? "warn" : "bad"],
+          [`${r.variety}%`, "Word variety", r.range >= 55 ? "ok" : "warn"],
+          [r.vagueCount, "Vague words", r.vagueCount <= 2 ? "ok" : "warn"],
+        ]} />
         <p style={{ fontSize: 15, lineHeight: 1.65 }}>{gRep.line}</p>
 
         {gRep.junk.length > 0 && (
           <>
             <div className="eye" style={{ margin: "14px 0 8px" }}>Not recognised as words</div>
-            <div className="tally">
-              {gRep.junk.slice(0, 8).map((j) => <span className="tchip" key={j.word}>{j.word} <b>×{j.n}</b></span>)}
-            </div>
+            <WordBars items={gRep.junk.map((j) => [j.word, j.n])} tone="#7A939A" max={6} />
           </>
         )}
         {r.registerCount > 0 && (
@@ -5578,18 +5629,14 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
         {r.vagueCount >= 3 && (
           <>
             <div className="eye" style={{ margin: "16px 0 8px" }}>Vague words · {r.vagueCount}</div>
-            <div className="tally">
-              {r.vague.slice(0, 6).map((v) => <span className="tchip" key={v.word}>{v.word} <b>×{v.n}</b></span>)}
-            </div>
+            <WordBars items={r.vague.map((v) => [v.word, v.n])} tone="#C99A4B" max={6} />
             <p className="ex" style={{ marginTop: 8 }}>Each of these is a place a specific noun would have been stronger.</p>
           </>
         )}
         {r.repeats && r.repeats.length > 0 && (
           <>
             <div className="eye" style={{ margin: "16px 0 8px" }}>Words you leaned on</div>
-            <div className="tally">
-              {r.repeats.slice(0, 5).map((v) => <span className="tchip" key={v.word}>{v.word} <b>×{v.n}</b></span>)}
-            </div>
+            <WordBars items={r.repeats.map((v) => [v.word, v.n])} tone="#5FAECB" />
           </>
         )}
         {gRep.errs.length > 0 && (
@@ -5600,6 +5647,15 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
           <><div className="eye" style={{ margin: "16px 0 8px" }}>Fine here, odd abroad</div>
             <Corrections items={gRep.regional} /></>
         )}
+        <FixIt>
+          {r.repeats && r.repeats.length > 0
+            ? `You reached for "${r.repeats[0].word}" ${r.repeats[0].n} times. Before your next answer, decide on two alternatives for it — swapping one word is the fastest way to lift range.`
+            : r.vagueCount >= 3
+              ? `Pick the vaguest word you used and name the actual thing instead. "${r.vague[0].word}" → a specific noun. One substitution per answer is enough to build the habit.`
+              : gRep.errs.length > 0
+                ? `Say the corrected version of the first slip out loud twice now. Fixing it in your ear is what stops it recurring, not reading it.`
+                : `Language held up. Push range next: use one word you would normally avoid because it feels too formal.`}
+        </FixIt>
       </div>
     );
 
@@ -5633,14 +5689,37 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
       }
     }
 
+    // Word of the day: did they land it, and if not, how it would have fitted
+    if (rep.wotd && rep.wotd.w) {
+      cards.push(<WotdCard wotd={rep.wotd} used={usedW} key="wotd" />);
+    }
+
     if (r.wc >= 12) {
       cards.push(<ClarityCard r={r} key="clarity" />);
     }
 
     cards.push(
       <div className="card sky pcard" key="eval">
+        <style>{RPT_CSS}</style>
         <CornerDecor emoji="🧭" />
         <RoleHead role={ROLES[3]} />
+
+        {/* strongest and weakest measure, named — the two things worth knowing
+            before any of the prose below */}
+        {(() => {
+          const measures = [["Structure", r.structure], ["Flow", r.fluency], ["Grammar", r.accuracy],
+            ["Range", r.range], ["Clarity", r.clarity100]];
+          const sorted = [...measures].sort((a, b) => b[1] - a[1]);
+          const best = sorted[0], worst = sorted[sorted.length - 1];
+          return (
+            <StatStrip items={[
+              [best[1], `Best · ${best[0]}`, "ok"],
+              [worst[1], `Weakest · ${worst[0]}`, worst[1] < 50 ? "bad" : "warn"],
+              [`${r.sophistication}%`, "Beyond basic", r.sophistication >= 20 ? "ok" : "warn"],
+            ]} />
+          );
+        })()}
+
         <div className="dials" style={{ margin: "6px 0 14px" }}>
           {[["Structure", r.structure], ["Flow", r.fluency], ["Grammar", r.accuracy],
             ["Range", r.range], ["Clarity", r.clarity100]].map(([k, v], i) => (
@@ -5648,6 +5727,14 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
           ))}
         </div>
         <OverallCelebrate />
+
+        {/* the three things structure is actually scored on, as a checklist */}
+        <div className="eye" style={{ marginTop: 14 }}>What structure is scored on</div>
+        <div className="statstrip" style={{ marginTop: 8 }}>
+          <div><b className={r.hasStance ? "ok" : "bad"}>{r.hasStance ? "✓" : "✗"}</b><span>Took a position</span></div>
+          <div><b className={r.connectives > 0 ? "ok" : "bad"}>{r.connectives}</b><span>Reasons given</span></div>
+          <div><b className={r.hasClose ? "ok" : "bad"}>{r.hasClose ? "✓" : "✗"}</b><span>Closed it</span></div>
+        </div>
         <p className="ex" style={{ marginTop: 10 }}>
           Range is vocabulary reach: {r.sophistication}% of your content words went beyond the
           everyday two thousand{r.vagueCount ? `, and ${r.vagueCount} vague word${r.vagueCount === 1 ? "" : "s"} pulled it down` : ""}.
@@ -5665,8 +5752,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
         )}
         <div className="eye" style={{ marginTop: 14 }}>Commendation</div>
         <p style={{ fontSize: 15.5, lineHeight: 1.65, marginTop: 6 }}>{ai && ai.commend ? ai.commend : eRep.commend}</p>
-        <div className="eye" style={{ marginTop: 14 }}>Recommendation</div>
-        <div className="note">{ai && ai.recommend ? ai.recommend : eRep.recommend}</div>
+        <FixIt label="The one recommendation">{ai && ai.recommend ? ai.recommend : eRep.recommend}</FixIt>
         <TranslateButton text={ai && ai.recommend ? ai.recommend : eRep.recommend} />
         {sarvamReady() && (
           <button className="btn sm" style={{ marginTop: 10 }}
@@ -5678,9 +5764,6 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
         {aiState === "offline" && <div className="tip" style={{ marginTop: 12 }}>
           This evaluation was written from your measured numbers. Connect an API key for a written one that quotes you directly.
         </div>}
-        <p className="ex" style={{ marginTop: 12 }}>
-          Structure counts three things: you took a position{r.hasStance ? " ✓" : " ✗"}, gave reasons ({r.connectives} connective{r.connectives === 1 ? "" : "s"}), and closed it{r.hasClose ? " ✓" : " ✗"}.
-        </p>
       </div>
     );
 
@@ -5856,6 +5939,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
           mic={mic}
           onStop={() => finish()}
           onBack={() => { mic.stop(); watch.stop(); watch.reset(); setPhase("pick"); }}
+          slot={slot}
         />
       )}
 
@@ -6065,6 +6149,27 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
 const CLUB_CSS = `
 @keyframes clubWaveDrift{0%{transform:translateX(0)}100%{transform:translateX(-25%)}}
 @keyframes clubFoamPulse{0%,100%{opacity:.55}50%{opacity:.9}}
+.pro-card{position:relative;overflow:hidden;border-radius:var(--r-card,26px);
+  background:linear-gradient(150deg,#2E6F86 0%,#3E8FAD 46%,#5FAECB 100%);
+  box-shadow:0 18px 44px rgba(16,72,92,.28)}
+.pro-glow{position:absolute;top:-40%;right:-14%;width:230px;height:230px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,255,255,.30),transparent 66%);pointer-events:none}
+.pro-body{position:relative;z-index:1;padding:22px 20px 20px}
+.pro-eye{display:inline-block;font-family:var(--bod);font-weight:800;font-size:10px;letter-spacing:.2em;
+  text-transform:uppercase;color:#2E6F86;background:#F2C14E;border-radius:999px;padding:4px 11px}
+.pro-head{margin-top:12px;font-family:var(--dis);font-weight:800;font-size:22px;line-height:1.18;color:#fff}
+.pro-list{margin:13px 0 0;padding:0;list-style:none}
+.pro-list li{position:relative;padding-left:22px;margin-bottom:7px;font-size:13.5px;line-height:1.5;
+  color:rgba(255,255,255,.9)}
+.pro-list li::before{content:"";position:absolute;left:3px;top:7px;width:9px;height:5px;
+  border-left:2px solid #F2C14E;border-bottom:2px solid #F2C14E;transform:rotate(-45deg)}
+.pro-cta{width:100%;margin-top:16px;border:none;border-radius:999px;padding:14px 20px;cursor:pointer;
+  background:#fff;color:#2E6F86;font-family:var(--bod);font-weight:800;font-size:15px;
+  box-shadow:0 8px 20px rgba(16,72,92,.26);transition:transform .2s,box-shadow .2s}
+.pro-cta:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 12px 26px rgba(16,72,92,.34)}
+.pro-cta:active:not(:disabled){transform:scale(.98)}
+.pro-cta:disabled{opacity:.65;cursor:default}
+.pro-err{margin:10px 0 0;font-size:12.5px;line-height:1.5;color:#FFD9CF}
 @keyframes clubPalmSway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
 @keyframes clubBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
 @keyframes clubRipple{0%{box-shadow:0 0 0 0 rgba(10,158,196,.35)}100%{box-shadow:0 0 0 18px rgba(10,158,196,0)}}
@@ -6207,6 +6312,8 @@ function StatPill({ icon, value, label, tone }) {
 
 function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, profile, replay, startWithRandomTopic }) {
   const { user, profile: authProfile } = useAuth();
+  const isPro = authProfile?.plan === "paid";
+  const { upgrade, paying, payError } = useUpgrade({ email: user?.email });
   const plan = PLANS.find((p) => p.id === active) || PLANS[1];
   const challenge = PLANS.find((p) => p.id === 7) || PLANS[0];
   const onChallenge = active === challenge.id;
@@ -6328,6 +6435,26 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
         <StatPill icon={<StarIcon className="h-5 w-5" />} value={stats.xp} label="Points" tone="text-gold" />
         <StatPill icon={<ClockIcon className="h-5 w-5" />} value={`${Math.round(stats.seconds / 60)}m`} label="Mic Time" tone="text-palm-green" />
       </section>
+
+      {/* UPGRADE — only for signed-in free users; PRO members see nothing */}
+      {user && !isPro && (
+        <section className="pro-card">
+          <div className="pro-glow" aria-hidden="true" />
+          <div className="pro-body">
+            <div className="pro-eye">Yap PRO</div>
+            <div className="pro-head">Unlimited speeches,<br />every mode open.</div>
+            <ul className="pro-list">
+              <li>Unlimited speeches and evaluations</li>
+              <li>Debate mode with research briefs</li>
+              <li>Full history and progress tracking</li>
+            </ul>
+            <button className="pro-cta" onClick={upgrade} disabled={paying}>
+              {paying ? "Opening payment…" : "Upgrade — ₹199/month"}
+            </button>
+            {payError && <p className="pro-err">{payError}</p>}
+          </div>
+        </section>
+      )}
 
       {/* ISLAND CHALLENGE */}
       <section className="relative overflow-hidden rounded-card border border-white/50 bg-gradient-to-b from-warm-sand/70 to-foam/50 p-5 shadow-[0_16px_40px_rgba(10,158,196,.1)] backdrop-blur-xl">
@@ -7102,7 +7229,6 @@ function YapApp() {
     if (xp > 0) setBurst({ amount: xp, key: Date.now() });
   }, [active, setStats, setAgenda, setDays]);
 
-  const stage = stageFor(stats.reps);
 
   // Bottom nav hides on scroll down, reappears on scroll up
   const [navHidden, setNavHidden] = useState(false);
@@ -7203,7 +7329,7 @@ function YapApp() {
         </div>
 
         <p className="ex" style={{ textAlign: "center", padding: "22px 0 0" }}>
-          {stage.name} · {stats.reps} speech{stats.reps === 1 ? "" : "es"} on record
+          Yap Beta access August 2026 · Yap &copy; 2026
         </p>
       </div>
       {burst && (
