@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AuthBar } from "@/components/AuthBar";
 import { useAuth } from "@/lib/supabase/useAuth";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { useUpgrade } from "@/lib/razorpay";
 import { SLOTS, TOPICS, VOCAB, ROLES, PLANS } from "@/lib/yap/content";
 import {
@@ -19,6 +20,7 @@ import {
   loadLibrary, checkWordUsage, usageGrammar, WORD_JUDGE_SYS, pick, spinTick,
   STAGES, stageFor, wordOfTheDay, usedWord,
 } from "@/lib/yap/store";
+import { detectTimezone, todayLocalDate } from "@/lib/yap/date";
 import { CSS } from "@/app/styles/base";
 import { RECORDING_SCREEN_CSS } from "@/app/styles/recording";
 import { ANALYZING_SCREEN_CSS } from "@/app/styles/analyzing";
@@ -301,7 +303,12 @@ function useMic() {
               // surfaced only in devtools — the UI just says "unavailable",
               // but this is what actually broke, for whoever's debugging it
               console.error("[YAP] accuracy pass failed:", err);
-              sarvamRef.current = { state: "failed" }; setSarvam({ state: "failed" });
+              // An expired session is the one failure the user can act on, so
+              // it gets its own state and its own line in <Notice>.
+              const next = err && err.code === "unauthorized"
+                ? { state: "failed", reason: "unauthorized" }
+                : { state: "failed" };
+              sarvamRef.current = next; setSarvam(next);
             })
             .finally(() => { sarvamPendingRef.current = false; });
         };
@@ -1617,11 +1624,21 @@ function Notice({ mic }) {
       : !mic.canTranscribe
         ? "This browser records but can't transcribe live — Chrome or Edge can. You can still write your answer."
         : null;
-  if (!hard && !gap) return null;
+  // The recording itself still worked — only the accurate re-read was
+  // refused — so this sits alongside the others rather than replacing them.
+  const signedOut = mic.sarvam?.state === "failed" && mic.sarvam.reason === "unauthorized";
+  if (!hard && !gap && !signedOut) return null;
   return (
     <>
       {hard && <div className="warnbox" role="alert">{hard}</div>}
       {!hard && gap && <div className="warnbox">{gap}</div>}
+      {signedOut && (
+        <div className="warnbox" role="alert">
+          You&rsquo;re not signed in, so the accurate transcript couldn&rsquo;t be
+          fetched. Your recording and the live caption are safe &mdash; sign in
+          and record again for the accurate read.
+        </div>
+      )}
     </>
   );
 }
@@ -2231,7 +2248,7 @@ Judge the case, never the position — a well-argued side you disagree with scor
 
 
 
-function DebateMode({ mic, onFinish, lib, profile }) {
+function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
   const [stage, setStage] = useState("stance");
   const [topic, setTopic] = useState(() => pick(TOPICS["Placement & GD"]));
   const [spinning, setSpinning] = useState(false);
@@ -2261,7 +2278,15 @@ function DebateMode({ mic, onFinish, lib, profile }) {
   const prep = useStopwatch(prepSeconds, () => setStage("speak"));
 
   /* ---- the speech itself, reusing the existing recording experience ---- */
+  const finishingRef = useRef(false);
+  // useRef's initial-value argument is only ever used on the component's
+  // first render, so this mints exactly one id per mount without mutating
+  // .current during render (reset() below mints a fresh one per attempt).
+  const clientEventIdRef = useRef(crypto.randomUUID());
+
   const finish = useCallback(async (forced) => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
     const secs = typeof forced === "number" ? forced : Math.max(1, watch.value());
     const m = modeRef.current;
     mic.stop(); watch.stop();
@@ -2273,7 +2298,23 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     setRep({ r, tRep, aRep: ahReport(r), gRep: gramReport(r, null, false), slot });
     setStage("analyzing");
     setPetals(true); setTimeout(() => setPetals(false), 3200);
-    onFinish({ xp: 45 + Math.round(r.debateScore / 2), seconds: secs, kind: "topic" });
+    const xp = 45 + Math.round(r.debateScore / 2);
+    // local agenda UI still marks "topic" done for the day — cosmetic only.
+    // The server-persisted kind is "debate": debate must never move the
+    // streak (only a completed Table Topics session does).
+    onFinish({ xp, seconds: secs, kind: "topic" });
+
+    const qualifies = !r.unintelligible && r.wc >= 15;
+    if (qualifies && submitSession) {
+      submitSession({
+        clientEventId: clientEventIdRef.current,
+        kind: "debate",
+        durationSeconds: secs,
+        xp,
+        topic,
+        overallScore: typeof r.debateScore === "number" ? Math.round(r.debateScore) : null,
+      });
+    }
 
     if (r.unintelligible || r.wc < 15) { setAiState("skip"); return; }
     setAiState("loading");
@@ -2285,7 +2326,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
       .then((j) => { setAi(j); setAiState("done"); })
       .catch(() => setAiState("offline"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mic, stance, slot, topic, prepSeconds, onFinish]);
+  }, [mic, stance, slot, topic, prepSeconds, onFinish, submitSession]);
 
   const watch = useStopwatch(slot.red + 30, finish);
 
@@ -2358,6 +2399,8 @@ function DebateMode({ mic, onFinish, lib, profile }) {
     setStage("stance"); setStance(null); setBrief(null); setBriefState("idle"); setBriefLeft(0);
     setRep(null); setAi(null); setAiState("idle");
     prep.reset(); watch.reset();
+    finishingRef.current = false;
+    clientEventIdRef.current = crypto.randomUUID();
   };
 
 
@@ -2829,7 +2872,7 @@ function DebateMode({ mic, onFinish, lib, profile }) {
 
 /* ============================== TABLE TOPICS ============================== */
 
-function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, clearPreselected }) {
+function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, clearPreselected, submitSession }) {
   const allTopics = useMemo(() => {
     const merged = { ...TOPICS };
     (lib.topics || []).forEach((t) => {
@@ -2864,7 +2907,20 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
   const modeRef = useRef("mic"); modeRef.current = mode;
   const pool = useMemo(() => cat.flatMap((c) => allTopics[c] || []), [cat, allTopics]);
 
+  // Guards against the stopwatch-expiry path and the manual-stop button both
+  // firing finish() for the same attempt. One client_event_id per attempt —
+  // minted fresh on entry to "pick"/each new topic, reused on retry so a
+  // failed submitSession() can be retried safely (the server's unique
+  // constraint makes a repeat POST of the same id a no-op).
+  const finishingRef = useRef(false);
+  // useRef's initial-value argument is only used on first render, so this
+  // mints exactly one id per mount without mutating .current during render
+  // (spin() below mints a fresh one per new attempt).
+  const clientEventIdRef = useRef(crypto.randomUUID());
+
   const finish = useCallback(async (forced) => {
+    if (finishingRef.current) return;   // already in flight for this attempt
+    finishingRef.current = true;
     const secs = typeof forced === "number" ? forced : Math.max(1, watch.value());
     const m = modeRef.current;
     const voiced = m === "mic" ? Math.round(mic.voicedSeconds()) : null;
@@ -2890,7 +2946,25 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
     setRep({ r, tRep, aRep, gRep, eRep, usedW, slot, wotd });
     setPhase("analyzing");
     setPetals(true); setTimeout(() => setPetals(false), 3400);
-    onFinish({ xp: 30 + Math.round(r.overall / 2), seconds: secs, kind: "topic" });
+    const xp = 30 + Math.round(r.overall / 2);
+    onFinish({ xp, seconds: secs, kind: "topic" });
+
+    // Streak/completion rule: a session only counts as a completed Table
+    // Topics session — and only then is it worth persisting server-side —
+    // once it has real speech: not unintelligible, and at least 15 words.
+    // The same threshold already gates whether the answer is worth sending
+    // to the evaluator, just below.
+    const qualifies = !r.unintelligible && r.wc >= 15;
+    if (qualifies && submitSession) {
+      submitSession({
+        clientEventId: clientEventIdRef.current,
+        kind: "topic",
+        durationSeconds: secs,
+        xp,
+        topic,
+        overallScore: typeof r.overall === "number" ? Math.round(r.overall) : null,
+      });
+    }
 
     if (r.unintelligible || r.wc < 15) { setAiState("skip"); return; }
     setAiState("loading");
@@ -2898,7 +2972,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
       .then((j) => { setAi(j); setAiState("done"); })
       .catch(() => setAiState("offline"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mic, topic, slot, onFinish, wotd]);
+  }, [mic, topic, slot, onFinish, wotd, submitSession]);
 
   const watch = useStopwatch(slot.red + 30, finish);
 
@@ -2915,6 +2989,8 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
 
   const spin = () => {
     setPhase("pick"); setRep(null); setAi(null); setAiState("idle"); setTyped(""); setDeepOpen(false); watch.reset();
+    finishingRef.current = false;
+    clientEventIdRef.current = crypto.randomUUID();   // new attempt, new idempotency key
     setSpinning(true);
     let i = 0;
     const id = setInterval(() => {
@@ -3665,21 +3741,30 @@ function StatPill({ icon, value, label, tone }) {
   );
 }
 
-function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, profile, replay, startWithRandomTopic }) {
-  const { user, profile: authProfile } = useAuth();
-  const isPro = authProfile?.plan === "paid";
+function Club({ active, setActive, stats, agenda, go, wotd, lib, profile, replay, startWithRandomTopic, user, authProfile, meState, meLoading, meError, refreshMeState, onStartChallenge, showLegacyNotice, onDismissLegacyNotice }) {
+  const isPro = !!meState?.entitlement?.active;
   const { upgrade, paying, payError } = useUpgrade({ email: user?.email });
   const plan = PLANS.find((p) => p.id === active) || PLANS[1];
   const challenge = PLANS.find((p) => p.id === 7) || PLANS[0];
-  const onChallenge = active === challenge.id;
 
-  // Use backend streak data if available, fallback to localStorage days
-  const backendStreak = authProfile?.streak || 0;
-  const localStreak = days.length;
-  const actualStreak = backendStreak > 0 ? backendStreak : localStreak;
+  // Server is the only source of streak/challenge truth. `null` (still
+  // loading) must never render as 0 — that would be a stale/false number.
+  const actualStreak = meState?.streak ?? 0;
+  const serverChallenge = meState?.challenge;
+  const onChallenge = !!serverChallenge && serverChallenge.status === "active";
+  // Which day of the challenge the calendar is on (server-computed from
+  // started_on in the user's timezone) — this is a position, not a tally.
+  const challengeCurrentDay = serverChallenge?.current_day ?? 0;
+  // Which days were actually earned. Separate on purpose: a skipped day must
+  // leave a gap in the palm row, not shift every later day down one. Money is
+  // paid per day actually completed, so it counts these, never the calendar.
+  const challengeCompletedDays = useMemo(
+    () => new Set(serverChallenge?.completed_days ?? []),
+    [serverChallenge]
+  );
+  const challengeCompletedCount = serverChallenge?.completed_count ?? challengeCompletedDays.size;
 
-  const challengeDays = onChallenge ? days : [];
-  const challengeEarned = Math.min(actualStreak, 7) * challenge.back;
+  const challengeEarned = Math.min(challengeCompletedCount, 7) * challenge.back;
   const challengeRemaining = Math.max(0, challenge.fee - challengeEarned);
 
   const timeOfDay = new Date().getHours();
@@ -3702,9 +3787,9 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
   // full tree draw at nearly the same height.
   const palmSizes = [22, 34, 48, 62, 76];
 
-  // Map streak to appropriate palm stage for 7-day challenge
+  // Map challenge day completions (server truth) to palm stage
   const getPalmStage = (dayNum) => {
-    if (dayNum > actualStreak) return 0; // future days = seed
+    if (!challengeCompletedDays.has(dayNum)) return 0; // not earned = seed
     if (dayNum <= 1) return 0; // day 1 = seed
     if (dayNum <= 2) return 1; // day 2 = sprout
     if (dayNum <= 3) return 2; // day 3 = small
@@ -3723,6 +3808,20 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
   return (
     <div className="space-y-5 pb-2">
       <style>{CLUB_CSS}</style>
+
+      {user && meError && (
+        <section className="flex items-center justify-between gap-3 rounded-2xl border border-coral/40 bg-coral/10 px-4 py-3 text-[13px] text-ink">
+          <span>Couldn&apos;t load your streak and progress. {meError}</span>
+          <button onClick={refreshMeState} className="shrink-0 font-bold text-deep-ocean underline">Retry</button>
+        </section>
+      )}
+
+      {showLegacyNotice && (
+        <section className="flex items-center justify-between gap-3 rounded-2xl border border-white/50 bg-white/70 px-4 py-3 text-[13px] text-ink">
+          <span>We found practice history saved only on this device from before accounts had a server-side streak. That local count no longer applies — your streak now starts fresh and is saved to your account.</span>
+          <button onClick={onDismissLegacyNotice} className="shrink-0 font-bold text-deep-ocean underline">Got it</button>
+        </section>
+      )}
 
       {/* HERO MISSION CARD */}
       <section className="relative overflow-hidden rounded-card border border-white/50 bg-gradient-to-b from-foam/95 to-lagoon/30 shadow-[0_20px_60px_rgba(10,158,196,.12)] backdrop-blur-xl">
@@ -3784,12 +3883,21 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
         </button>
       </section>
 
-      {/* STATS ROW */}
-      <section className="grid grid-cols-3 gap-3">
-        <StatPill icon={<MicIcon className="h-5 w-5" />} value={stats.reps} label="Speeches" tone="text-ocean-blue" />
-        <StatPill icon={<StarIcon className="h-5 w-5" />} value={stats.xp} label="Points" tone="text-gold" />
-        <StatPill icon={<ClockIcon className="h-5 w-5" />} value={`${Math.round(stats.seconds / 60)}m`} label="Mic Time" tone="text-palm-green" />
-      </section>
+      {/* STATS ROW — server stats when signed in (never a stale local number
+          while loading), local-only stats when signed out */}
+      {user && meLoading ? (
+        <section className="grid grid-cols-3 gap-3" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-[86px] animate-pulse rounded-2xl border border-white/50 bg-white/40" />
+          ))}
+        </section>
+      ) : (
+        <section className="grid grid-cols-3 gap-3">
+          <StatPill icon={<MicIcon className="h-5 w-5" />} value={user ? (meState?.stats?.reps ?? 0) : stats.reps} label="Speeches" tone="text-ocean-blue" />
+          <StatPill icon={<StarIcon className="h-5 w-5" />} value={user ? (meState?.stats?.xp ?? 0) : stats.xp} label="Points" tone="text-gold" />
+          <StatPill icon={<ClockIcon className="h-5 w-5" />} value={`${Math.round((user ? (meState?.stats?.seconds ?? 0) : stats.seconds) / 60)}m`} label="Mic Time" tone="text-palm-green" />
+        </section>
+      )}
 
       {/* UPGRADE — only for signed-in free users; PRO members see nothing */}
       {user && !isPro && (
@@ -3816,9 +3924,9 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="m-0 font-[var(--dis)] text-[18px] font-bold text-ink">🌴 7-Day Island Challenge</h2>
-            <p className="mb-0 mt-1 text-[12.5px] text-ink/60">Day {actualStreak} of 7 · Speak daily. Earn rewards.</p>
+            <p className="mb-0 mt-1 text-[12.5px] text-ink/60">Day {challengeCurrentDay} of 7 · Speak daily. Earn rewards.</p>
           </div>
-          {actualStreak > 0 ? (
+          {onChallenge ? (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-btn bg-palm-green px-3 py-1 text-[11px] font-bold text-white">● Active</span>
           ) : (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-btn bg-ink/10 px-3 py-1 text-[11px] font-bold text-ink/60">Not started</span>
@@ -3828,8 +3936,8 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
         <div className="mt-5 flex items-end justify-center gap-2" style={{ minHeight: 96 }}>
           {Array.from({ length: 7 }, (_, i) => i + 1).map((d) => {
             const stageIdx = getPalmStage(d);
-            const isDone = d <= actualStreak;
-            const isToday = d === actualStreak + 1 && actualStreak < 7;
+            const isDone = challengeCompletedDays.has(d);
+            const isToday = d === challengeCurrentDay && !isDone;
             const palmSrc = palmImages[stageIdx];
             const palmSize = palmSizes[stageIdx];
 
@@ -3867,12 +3975,16 @@ function Club({ days, setDays, active, setActive, stats, agenda, go, wotd, lib, 
 
         <button
           onClick={() => {
-            if (!onChallenge) { setActive(7); setDays([]); }
             // the challenge is a daily speaking drill, so it always opens
-            // Table Topics — not wherever the meeting agenda happens to be
+            // Table Topics — not wherever the meeting agenda happens to be.
+            // Starting/resuming is server-backed and idempotent — it never
+            // wipes prior day history, unlike the old setDays([]) reset.
+            if (!onChallenge && user) onStartChallenge();
+            if (!onChallenge) setActive(7);
             go("topics");
           }}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-btn bg-deep-ocean py-3.5 text-[15px] font-bold text-white shadow-[0_14px_30px_rgba(8,126,164,.35)] transition active:scale-[.98]"
+          disabled={user && meLoading}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-btn bg-deep-ocean py-3.5 text-[15px] font-bold text-white shadow-[0_14px_30px_rgba(8,126,164,.35)] transition active:scale-[.98] disabled:opacity-60"
         >
           {onChallenge ? "Continue Challenge" : "Start Challenge"}
           <Icon name="arrow" size={18} />
@@ -4429,13 +4541,84 @@ export default function Yap() {
   return <Boundary><YapApp /></Boundary>;
 }
 
+/* ==========================================================================
+   SERVER STATE — one owner
+   `/api/me/state` is the single authoritative source for streak, stats,
+   challenge and entitlement. Fetched once here, in YapApp(), and passed down
+   — child components must not call useAuth()/fetch this themselves, so there
+   is exactly one copy of server truth instead of one per component.
+   ========================================================================== */
+function useMeState(user) {
+  const [meState, setMeState] = useState(null);   // null = not loaded yet
+  const [meLoading, setMeLoading] = useState(true);
+  const [meError, setMeError] = useState(null);
+
+  const refreshMeState = useCallback(async () => {
+    if (!user) { setMeState(null); setMeLoading(false); return null; }
+    setMeLoading(true);
+    setMeError(null);
+    try {
+      const res = await fetch("/api/me/state", { cache: "no-store" });
+      if (!res.ok) throw new Error("me/state " + res.status);
+      const j = await res.json();
+      setMeState(j);
+      return j;
+    } catch (e) {
+      setMeError(e.message || "Could not load your progress");
+      return null;
+    } finally {
+      setMeLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    // refreshMeState is intentionally re-created per `user` (it closes over
+    // it), so depending on it here would refetch on every render of the
+    // callback identity rather than only on a real user change — user?.id is
+    // the correct, narrower dependency.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- setState calls inside refreshMeState are what re-sync loading/error state on a user change; that is the intended effect.
+    refreshMeState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  return { meState, meLoading, meError, refreshMeState, setMeState };
+}
+
 function YapApp() {
   const navRef = useRef(null);
   const tabRefs = useRef({});
   const [sliderStyle, setSliderStyle] = useState({ left: 0, width: 0 });
   const [tab, setTab] = useState("club");
+  const { user, profile: authProfile, loading: authLoading } = useAuth();
+  const { meState, meLoading, meError, refreshMeState, setMeState } = useMeState(user);
+
+  // Capture the browser's IANA timezone once per session and persist it —
+  // every streak/challenge date boundary on the server depends on this being
+  // current. `timezone` is one of the columns the migration leaves
+  // self-editable by the signed-in user.
+  useEffect(() => {
+    if (!user || !authProfile) return;
+    const detected = detectTimezone();
+    if (authProfile.timezone && authProfile.timezone === detected) return;
+    const supabase = createBrowserSupabaseClient();
+    supabase.from("profiles").update({ timezone: detected }).eq("id", user.id).then(({ error }) => {
+      if (error) console.error("[YAP] timezone sync failed", error.message);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, authProfile?.timezone]);
   const [days, setDays] = usePersisted("days", []);
   const [active, setActive] = usePersisted("plan", 14);
+  // One-time notice: local pre-migration history exists but the server has
+  // never recorded a session for this account. We deliberately do NOT
+  // fabricate practice_sessions rows for it (no real per-day topic/score/
+  // timestamp survives in localStorage) — we only surface it once so the
+  // user knows their old local "streak" no longer counts and isn't silently
+  // discarded without explanation.
+  const [legacyDays, setLegacyDaysAcknowledged] = usePersisted("legacyDaysAcknowledged", false);
+  // Derived, not stored: avoids a synchronous setState-in-effect, and there
+  // is nothing here that isn't already computable from existing state.
+  const showLegacyNotice = !!user && !meLoading && !!meState && !legacyDays
+    && days.length > 0 && (meState.stats?.reps ?? 0) === 0 && (meState.streak ?? 0) === 0;
   const [stats, setStats] = usePersisted("stats", { xp: 0, reps: 0, seconds: 0 });
   // the agenda is per-day: yesterday's ticks shouldn't count as today's meeting
   const [agendaRaw, setAgendaRaw] = usePersisted("agenda", { day: todayKey(), vocab: false, topic: false });
@@ -4475,14 +4658,79 @@ function YapApp() {
   }, [tab]);
 
   // every xp award in the app funnels through here, so this is the one place
-  // the celebration has to be wired up
+  // the celebration has to be wired up. `stats`/`days` here are local-only UX
+  // (the daily agenda ticks, the confetti burst) — streak, real stats and
+  // challenge progress come from the server via meState/refreshMeState, never
+  // from this local counter. See submitSession for the authoritative path.
   const [burst, setBurst] = useState(null);
   const onFinish = useCallback(({ xp, seconds, kind }) => {
     setStats((s) => ({ xp: s.xp + xp, reps: s.reps + 1, seconds: s.seconds + seconds }));
     setAgenda((a) => ({ ...a, [kind === "topic" ? "topic" : "vocab"]: true }));
-    setDays((v) => (v.length < active ? [...v, v.length + 1] : v));
     if (xp > 0) setBurst({ amount: xp, key: Date.now() });
-  }, [active, setStats, setAgenda, setDays]);
+  }, [setStats, setAgenda]);
+
+  /**
+   * The authoritative completion path: idempotent POST to
+   * /api/sessions/complete, and the server's returned streak/stats/challenge
+   * become the new truth in meState. Only `topic` and `debate` kinds are
+   * worth calling (vocab never moves the streak and is not persisted).
+   * @param {{ clientEventId: string, kind: "topic"|"debate", durationSeconds: number, xp: number, topic?: string, overallScore?: number|null }} params
+   * @returns {Promise<object|null>} the server response, or null on failure
+   */
+  const submitSession = useCallback(async (params) => {
+    if (!user) return null; // signed-out users have nothing to persist server-side
+    const localDate = todayLocalDate(authProfile?.timezone || detectTimezone());
+    try {
+      const res = await fetch("/api/sessions/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_event_id: params.clientEventId,
+          kind: params.kind,
+          duration_seconds: Math.round(params.durationSeconds),
+          xp: Math.round(params.xp),
+          topic: params.topic ?? null,
+          overall_score: params.overallScore ?? null,
+          local_date: localDate,
+        }),
+      });
+      if (!res.ok) throw new Error("sessions/complete " + res.status);
+      const j = await res.json();
+      // apply the returned numbers immediately for a snappy UI, then do a
+      // full re-sync so challenge shape (a freshly-started enrolment, day
+      // list, etc.) is never left half-stale
+      setMeState((prev) => ({
+        ...(prev || {}),
+        streak: j.streak,
+        stats: j.stats || prev?.stats,
+      }));
+      refreshMeState();
+      return j;
+    } catch (e) {
+      console.error("[YAP] submitSession failed", e && e.message);
+      return null;
+    }
+  }, [user, authProfile, setMeState, refreshMeState]);
+
+  /** Start/resume the 7-Day Island Challenge server-side. Idempotent — never
+   *  clears prior day history, unlike the old client-only setDays([]) reset. */
+  const startChallenge = useCallback(async () => {
+    if (!user) return null;
+    const localDate = todayLocalDate(authProfile?.timezone || detectTimezone());
+    try {
+      const res = await fetch("/api/challenge/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ local_date: localDate }),
+      });
+      if (!res.ok) throw new Error("challenge/start " + res.status);
+      await refreshMeState();
+      return true;
+    } catch (e) {
+      console.error("[YAP] startChallenge failed", e && e.message);
+      return null;
+    }
+  }, [user, authProfile, refreshMeState]);
 
 
   // Bottom nav hides on scroll down, reappears on scroll up
@@ -4574,12 +4822,16 @@ function YapApp() {
 
 
         <div className="panel" key={tab} role="tabpanel" aria-label={(TABS.find((t) => t.id === tab) || {}).label}>
-        {tab === "club" && <Club days={days} setDays={setDays} active={active} setActive={setActive}
+        {tab === "club" && <Club active={active} setActive={setActive}
           stats={stats} agenda={agenda} go={setTab} wotd={wotd} lib={lib}
-          profile={profile} replay={() => setIntro(true)} 
+          profile={profile} replay={() => setIntro(true)}
+          user={user} authProfile={authProfile} meState={meState} meLoading={meLoading} meError={meError}
+          refreshMeState={refreshMeState} onStartChallenge={startChallenge}
+          showLegacyNotice={showLegacyNotice}
+          onDismissLegacyNotice={() => { setLegacyDaysAcknowledged(true); setShowLegacyNotice(false); }}
           startWithRandomTopic={(topic) => { setPreselectedTopic(topic); setTab("topics"); }} />}
-        {tab === "debate" && <DebateMode mic={mic} onFinish={onFinish} lib={lib} profile={profile} />}
-        {tab === "topics" && <TableTopics mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} profile={profile} go={setTab} preselectedTopic={preselectedTopic} clearPreselected={() => setPreselectedTopic(null)} />}
+        {tab === "debate" && <DebateMode mic={mic} onFinish={onFinish} lib={lib} profile={profile} submitSession={submitSession} />}
+        {tab === "topics" && <TableTopics mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} profile={profile} go={setTab} preselectedTopic={preselectedTopic} clearPreselected={() => setPreselectedTopic(null)} submitSession={submitSession} />}
         {tab === "vocab" && <Vocabulary mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} />}
         </div>
 

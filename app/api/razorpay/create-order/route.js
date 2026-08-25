@@ -61,6 +61,10 @@ export async function POST(request) {
       amount: order.amount,
       currency: order.currency,
       label: plan.label,
+      // the key id is public by design (it ships to the browser in the
+      // checkout modal either way) — handing it back here means the client
+      // needs no NEXT_PUBLIC_ copy of it
+      key_id: keyId,
     });
   } catch (e) {
     const status = e && e.statusCode === 401 ? 401 : 500;

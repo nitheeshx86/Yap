@@ -51,7 +51,7 @@ export const DEBATE_CSS = `
   .stancecard[data-side="for"]{padding-right:34px}
   .stancecard[data-side="against"]{padding-left:34px}
 }
-.sc-label{display:block;font-family:var(--dis);font-weight:800;font-size:clamp(23px,5.8vw,31px);
+.sc-label{display:block;font-family:var(--dis);font-optical-sizing:auto;font-variation-settings:"SOFT" 12,"WONK" 1;font-style:italic;font-weight:800;font-size:clamp(23px,5.8vw,31px);
   line-height:1;letter-spacing:-.01em;color:var(--sc-accent);margin-bottom:11px}
 /* the little wave-on-a-rule divider */
 .sc-rule{display:flex;align-items:center;gap:5px;margin-bottom:13px}

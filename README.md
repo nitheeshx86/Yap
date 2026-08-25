@@ -20,6 +20,38 @@ You can start editing the page by modifying `app/page.js`. The page auto-updates
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Operator setup: Razorpay webhook
+
+Payments are settled two ways — the browser-side checkout `handler` callback
+(`/api/razorpay/verify-payment`) and an async webhook
+(`/api/razorpay/webhook`). Both call the same `settlePayment()` function
+(`lib/yap/payments.js`) and are idempotent on `razorpay_payment_id`, so
+whichever arrives first wins and the second is a no-op — this covers the case
+where the user closes the tab right after paying.
+
+To enable the webhook path:
+
+1. Set `RAZORPAY_WEBHOOK_SECRET` in the environment (not currently in
+   `.env.local` — generate one when you create the webhook in the dashboard).
+2. In the Razorpay Dashboard → Settings → Webhooks, add an endpoint pointing
+   at `https://<your-domain>/api/razorpay/webhook`.
+3. Subscribe it to: `payment.captured`, `payment.failed`, `order.paid`,
+   `refund.created`, `refund.processed`.
+4. Use the secret Razorpay generates for that webhook as
+   `RAZORPAY_WEBHOOK_SECRET` — it must match exactly, since the endpoint
+   verifies `x-razorpay-signature` as HMAC-SHA256 over the raw request body.
+
+Without this, the app still works via the handler-callback path alone, but a
+payment that succeeds while the user is offline/tab-closed will not be
+credited until they return and the handler fires (or you settle it manually).
+
+## Database migration
+
+Run `supabase/migrations/20260824074158_sessions_challenge_entitlements.sql`
+against the project's Postgres database. It is additive only. If the
+Supabase CLI is available: `npx supabase db push`. Otherwise, paste the file
+contents directly into the Supabase Dashboard's SQL editor and run it once.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

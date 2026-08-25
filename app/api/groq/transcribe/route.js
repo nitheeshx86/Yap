@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/supabase/authGuard";
 
 // English only for now — Indian languages stay on the Sarvam path until
 // that's wired up separately.
 const GROQ_STT_MODEL = "whisper-large-v3";
 
 export async function POST(request) {
+  const authed = await requireUser();
+  if (!authed.ok) return authed.response;
+
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "GROQ_API_KEY is not configured on the server" }, { status: 500 });

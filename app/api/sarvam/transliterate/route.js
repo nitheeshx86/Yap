@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/supabase/authGuard";
 
 export async function POST(request) {
+  const authed = await requireUser();
+  if (!authed.ok) return authed.response;
+
   const apiKey = process.env.SARVAM_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "SARVAM_API_KEY is not configured on the server" }, { status: 500 });

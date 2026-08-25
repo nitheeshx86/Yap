@@ -2,10 +2,26 @@
    Kept as a JS template literal so the <style> injection is byte-identical. */
 
 export const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
-.grdn{--mist:#EAF8FB;--foam:#D6F0F6;--ocean:#7EC8E3;--ocean-deep:#5FAECB;--sand:#F8F2E7;--sand-warm:#EEDBB8;--coral:#FF9F7F;--coral-deep:#E8674A;--ink:#1F4F5B;--ink2:#45636B;--ink3:#7A939A;--line:rgba(31,79,91,.14);--good:#7BAE8F;--warn:#C99A4B;--bad:#E8674A;--surf1:rgba(255,255,255,.55);--surf2:rgba(255,255,255,.8);--dis:"Baloo 2",system-ui,sans-serif;--bod:Manrope,system-ui,sans-serif;background:linear-gradient(180deg,var(--mist) 0%,var(--foam) 38%,var(--sand) 100%);color:var(--ink);font-family:var(--bod);min-height:100%;padding-bottom:150px;position:relative;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+.grdn{--mist:#EAF8FB;--foam:#D6F0F6;--ocean:#7EC8E3;--ocean-deep:#5FAECB;--sand:#F8F2E7;--sand-warm:#EEDBB8;--coral:#FF9F7F;--coral-deep:#E8674A;--ink:#1F4F5B;--ink2:#45636B;--ink3:#7A939A;--line:rgba(31,79,91,.14);--good:#7BAE8F;--warn:#C99A4B;--bad:#E8674A;--surf1:rgba(255,255,255,.55);--surf2:rgba(255,255,255,.8);--dis:"Fraunces","Baloo 2",Georgia,serif;--bod:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;background:linear-gradient(180deg,var(--mist) 0%,var(--foam) 38%,var(--sand) 100%);color:var(--ink);font-family:var(--bod);font-optical-sizing:auto;font-weight:400;min-height:100%;padding-bottom:150px;position:relative;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .grdn *{box-sizing:border-box}
 .grdn button{font-family:var(--bod)}
+/* Two faces: Fraunces (--dis) for titles, headings and display numbers;
+   Manrope (--bod) for body copy, labels and controls.
+   Fraunces is a variable font, so each display register gets its own point on
+   the SOFT/WONK/ital/wght axes rather than one flat heading treatment.
+   - wordmark: max character — italic, wonky, soft, heavy.
+   - .h1 (page headings): italic + wonky, gentle softness.
+   - .big (celebratory numbers): wonky + heavy, upright (digits read badly italic).
+   - .topic/.word (content the user reads aloud): upright, no wonk, soft touch —
+     stays calm and legible since it's read under time pressure.
+   - mid-register labels (dial/stage/report stats/etc.): wonky, upright, light soft.
+   Body text is Manrope and ignores these axes entirely. */
+.grdn h1,.grdn h2,.grdn h3,.grdn .h1,.grdn .big{font-optical-sizing:auto;font-variation-settings:"SOFT" 0,"WONK" 1;}
+.h1{font-style:italic;font-variation-settings:"SOFT" 22,"WONK" 1}
+.big{font-variation-settings:"SOFT" 0,"WONK" 1;font-style:normal}
+.topic,.word{font-variation-settings:"SOFT" 35,"WONK" 0;font-style:normal}
+.dial b,.rname{font-variation-settings:"SOFT" 12,"WONK" 1;font-style:normal}
+.wordmark-text,.mark{font-style:italic;font-variation-settings:"SOFT" 30,"WONK" 1;font-weight:800}
 .grdn::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;background-image:radial-gradient(760px 420px at 12% 0%,rgba(126,200,227,.14),transparent 62%),radial-gradient(680px 460px at 92% 18%,rgba(255,159,127,.08),transparent 60%),radial-gradient(700px 520px at 45% 110%,rgba(238,219,184,.35),transparent 62%)}
 .wrap{max-width:720px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
 .top{display:flex;align-items:center;justify-content:space-between;padding:24px 0 16px;gap:16px}

@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/supabase/authGuard";
 
 // Sarvam's key lives server-side, mirroring the Groq routes — the browser
 // only ever talks to our own /api routes, never api.sarvam.ai directly.
 const SARVAM_STT_MODEL = "saaras:v3";
 
 export async function POST(request) {
+  const authed = await requireUser();
+  if (!authed.ok) return authed.response;
+
   const apiKey = process.env.SARVAM_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "SARVAM_API_KEY is not configured on the server" }, { status: 500 });

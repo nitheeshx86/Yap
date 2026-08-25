@@ -1,21 +1,28 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import Razorpay from "razorpay";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { getAdminClient } from "@/lib/supabase/authGuard";
+import { settlePayment } from "@/lib/yap/payments";
 
-/* Verifies the signature Razorpay hands back, and only then upgrades the plan.
+/* Verifies the signature Razorpay hands back, then confirms the payment with
+ * Razorpay's own API (never trusting client-declared success), and settles
+ * through the SAME `settlePayment` function the webhook uses — so whichever
+ * of the two arrives first wins and the second is a no-op.
  *
  * Two things worth knowing about this file:
- *   1. The signature is HMAC-SHA256 over "order_id|payment_id" using the key
- *      SECRET, compared in constant time. A mismatch means the payload was
- *      forged or tampered with, and nothing is marked as paid.
- *   2. The upgrade is written with the SERVICE ROLE key, because the schema
- *      deliberately revokes `plan` updates from authenticated users — that
- *      column may only ever move as the result of a verified payment. */
+ *   1. The signature is HMAC-SHA256 over "order_id|payment_id", compared in
+ *      constant time. A mismatch means the payload was forged or tampered
+ *      with, and nothing is marked as paid.
+ *   2. `months` is NEVER read from the request body. The plan and its
+ *      duration are resolved from the order's own `notes` (written at
+ *      create-order time), fetched fresh from Razorpay's API — a client
+ *      posting `months: 12` after paying for one month has no effect. */
 
 export async function POST(request) {
+  const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keySecret) {
+  if (!keyId || !keySecret) {
     return NextResponse.json({ error: "Payments are not configured on the server" }, { status: 500 });
   }
 
@@ -33,12 +40,7 @@ export async function POST(request) {
     return NextResponse.json({ error: "Missing payment fields" }, { status: 400 });
   }
 
-  const expected = crypto
-    .createHmac("sha256", keySecret)
-    .update(`${orderId}|${paymentId}`)
-    .digest("hex");
-
-  // constant-time compare; lengths must match or timingSafeEqual throws
+  const expected = crypto.createHmac("sha256", keySecret).update(`${orderId}|${paymentId}`).digest("hex");
   const a = Buffer.from(expected, "utf8");
   const b = Buffer.from(String(signature), "utf8");
   const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
@@ -47,47 +49,68 @@ export async function POST(request) {
     return NextResponse.json({ error: "Payment could not be verified" }, { status: 400 });
   }
 
-  // Signature is good. Work out who this was for, from the session.
   let user = null;
   try {
     const supabase = await createServerClient();
     const { data } = await supabase.auth.getUser();
     user = data?.user || null;
-  } catch (e) { /* handled below */ }
+  } catch (e) {
+    /* handled below */
+  }
   if (!user) {
     return NextResponse.json({ error: "Sign in again to finish the upgrade" }, { status: 401 });
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) {
-    // The payment IS valid at this point — say so, and flag that the account
-    // still needs upgrading, rather than telling the user it failed.
-    console.error("[YAP] verified payment but SUPABASE_SERVICE_ROLE_KEY is missing");
-    return NextResponse.json(
-      { verified: true, upgraded: false, error: "Payment received, but the account could not be upgraded automatically." },
-      { status: 200 }
-    );
-  }
-
-  const months = Number(body?.months) === 12 ? 12 : 1;
-  const expires = new Date();
-  expires.setMonth(expires.getMonth() + months);
-
+  // Confirm with Razorpay's own API — never trust the browser's say-so that
+  // the payment succeeded. Read the order's notes for plan/months, and the
+  // payment's own status/amount for what was actually captured.
+  let order, payment;
   try {
-    const admin = createAdminClient(url, serviceKey, { auth: { persistSession: false } });
-    const { error } = await admin
-      .from("profiles")
-      .update({ plan: "paid", plan_expires_at: expires.toISOString() })
-      .eq("id", user.id);
-    if (error) throw error;
+    const razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    [order, payment] = await Promise.all([
+      razorpay.orders.fetch(orderId),
+      razorpay.payments.fetch(paymentId),
+    ]);
   } catch (e) {
-    console.error("[YAP] plan upgrade failed after verified payment:", e && (e.message || e));
-    return NextResponse.json(
-      { verified: true, upgraded: false, error: "Payment received, but the account could not be upgraded automatically." },
-      { status: 200 }
-    );
+    console.error("[YAP] verify-payment: could not fetch order/payment from Razorpay", { orderId, message: e && e.message });
+    return NextResponse.json({ error: "Could not confirm the payment with the gateway" }, { status: 502 });
   }
 
-  return NextResponse.json({ verified: true, upgraded: true, plan_expires_at: expires.toISOString() });
+  if (!order || order.notes?.user_id !== user.id) {
+    console.error("[YAP] verify-payment: order does not belong to this user", { orderId, userId: user.id });
+    return NextResponse.json({ error: "Payment does not match the signed-in account" }, { status: 400 });
+  }
+
+  if (payment.order_id !== orderId) {
+    console.error("[YAP] verify-payment: payment/order mismatch", { orderId, paymentId });
+    return NextResponse.json({ error: "Payment could not be verified" }, { status: 400 });
+  }
+
+  const planKey = order.notes?.plan || "pro_monthly";
+  const status = payment.status === "captured" ? "captured" : "failed";
+
+  const admin = getAdminClient();
+  const result = await settlePayment(admin, {
+    userId: user.id,
+    razorpayOrderId: orderId,
+    razorpayPaymentId: paymentId,
+    planKey,
+    amountPaise: payment.amount,
+    status,
+    verifiedVia: "handler",
+  });
+
+  if (!result.ok) {
+    const message =
+      result.error === "amount_mismatch"
+        ? "Payment amount did not match the plan. Contact support."
+        : "Payment received, but the account could not be upgraded automatically.";
+    return NextResponse.json({ verified: true, upgraded: false, error: message }, { status: 200 });
+  }
+
+  if (status !== "captured") {
+    return NextResponse.json({ verified: true, upgraded: false, error: "Payment was not captured" }, { status: 200 });
+  }
+
+  return NextResponse.json({ verified: true, upgraded: true, plan_expires_at: result.expiresAt });
 }

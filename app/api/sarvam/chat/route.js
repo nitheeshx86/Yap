@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/supabase/authGuard";
 
 // Sarvam's own model: native to Indian languages, so a reply reads far less
 // like a translation than routing it through an English-first model first.
 const SARVAM_CHAT_MODEL = "sarvam-105b";
 
 export async function POST(request) {
+  const authed = await requireUser();
+  if (!authed.ok) return authed.response;
+
   const apiKey = process.env.SARVAM_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "SARVAM_API_KEY is not configured on the server" }, { status: 500 });

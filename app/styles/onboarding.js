@@ -27,7 +27,7 @@ export const ONB_CSS = `
 .onb-body{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;overflow-y:auto;padding:8px 0;scrollbar-width:none;gap:2px}
 .onb-body::-webkit-scrollbar{display:none}
 .onb-foot{flex:0 0 auto;padding-top:16px}
-.onb-h{font-family:var(--dis);font-size:clamp(28px,7.6vw,42px);line-height:1.08;letter-spacing:-.02em;margin:0 0 14px;font-weight:700;text-wrap:balance}
+.onb-h{font-family:var(--dis);font-optical-sizing:auto;font-variation-settings:"SOFT" 22,"WONK" 1;font-style:italic;font-size:clamp(28px,7.6vw,42px);line-height:1.08;letter-spacing:-.02em;margin:0 0 14px;font-weight:700;text-wrap:balance}
 .onb-h em{font-style:normal;color:#FF9F7F}
 .onb[data-dawn="1"] .onb-h em{color:var(--coral)}
 .onb-p{font-size:16px;line-height:1.6;opacity:.78;max-width:34ch;margin:0 0 8px;text-wrap:pretty}
@@ -80,7 +80,7 @@ export const ONB_CSS = `
 /* baseline result */
 .bmet{display:flex;gap:9px;flex-wrap:wrap;margin:4px 0 12px}
 .bm{flex:1 1 78px;border:1px solid rgba(246,251,245,.18);border-radius:18px;padding:14px 6px;text-align:center;background:rgba(246,251,245,.04);animation:rise .5s cubic-bezier(.2,.9,.35,1) both}
-.bm b{display:block;font-family:var(--dis);font-weight:700;font-size:26px;line-height:1;font-variant-numeric:tabular-nums}
+.bm b{display:block;font-family:var(--dis);font-optical-sizing:auto;font-variation-settings:"SOFT" 0,"WONK" 1;font-weight:700;font-size:26px;line-height:1;font-variant-numeric:tabular-nums}
 .bm span{font-family:var(--bod);font-weight:700;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.6}
 .focusrow{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
 .ftag{font-family:var(--bod);font-weight:600;font-size:11px;border:1px solid rgba(255,159,127,.55);color:#FF9F7F;border-radius:999px;padding:5px 11px}
@@ -90,7 +90,7 @@ export const ONB_CSS = `
 .bloom span{position:absolute;border-radius:50%;border:2px solid rgba(255,159,127,.5);animation:bloomout 1.6s cubic-bezier(.2,.8,.2,1) forwards}
 @keyframes bloomout{from{width:20px;height:20px;opacity:.9}to{width:200vmax;height:200vmax;opacity:0}}
 .orbit{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:16px 0 4px}
-.orbit span{font-family:var(--dis);font-size:19px;opacity:0;animation:drawin .7s cubic-bezier(.2,.9,.3,1) forwards}
+.orbit span{font-family:var(--dis);font-optical-sizing:auto;font-variation-settings:"SOFT" 0,"WONK" 1;font-size:19px;opacity:0;animation:drawin .7s cubic-bezier(.2,.9,.3,1) forwards}
 @keyframes drawin{from{opacity:0;transform:translateY(12px)}to{opacity:.9;transform:none}}
 .pod:active{transform:scale(.97)}
 .pod[data-on="1"]:active{transform:translateY(-2px) scale(.99)}

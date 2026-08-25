@@ -14,6 +14,13 @@
   --radius-card: 32px;
   --radius-btn: 999px;
   --radius-dock: 28px;
+
+  /* Two faces, matching the --dis/--bod split in app/styles/base.js.
+     Tailwind-built screens (the Meeting tab) get them as font-display /
+     font-body, and sans is Manrope so unmarked body copy matches too. */
+  --font-display: "Fraunces", "Baloo 2", Georgia, serif;
+  --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 html,
@@ -21,6 +28,10 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
 }
 
 * {

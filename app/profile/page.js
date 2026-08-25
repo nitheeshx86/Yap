@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/supabase/useAuth";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useUpgrade } from "@/lib/razorpay";
 
 export default function ProfilePage() {
@@ -10,6 +10,24 @@ export default function ProfilePage() {
   const router = useRouter();
   // hooks must run on every render, so this stays above the early returns below
   const { upgrade, paying, payError } = useUpgrade({ email: user?.email });
+
+  // Server truth for streak/entitlement — profile.plan/streak above is only a
+  // denormalised cache and can be a request behind. `null` = still loading;
+  // never render 0/Free while that is the case.
+  const [meState, setMeState] = useState(null);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    fetch("/api/me/state", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (active) setMeState(j); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [user]);
+
+  // still loading iff we have a user but no server payload back yet
+  const meLoading = !!user && !meState;
+  const isPro = !!meState?.entitlement?.active;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -57,23 +75,23 @@ export default function ProfilePage() {
           <div style={{ marginBottom: "20px" }}>
             <p style={{ fontSize: "14px", color: "var(--ink60)", marginBottom: "5px" }}>Streak</p>
             <p style={{ fontSize: "16px", fontWeight: "500", color: "var(--ink)" }}>
-              {profile?.streak ?? 0} days
+              {meLoading ? "…" : `${meState?.streak ?? 0} days`}
             </p>
           </div>
 
           <div>
             <p style={{ fontSize: "14px", color: "var(--ink60)", marginBottom: "5px" }}>Plan</p>
             <p style={{ fontSize: "16px", fontWeight: "500", color: "var(--ink)" }}>
-              {profile?.plan === "paid" ? "PRO" : "Free"}
+              {meLoading ? "…" : isPro ? "PRO" : "Free"}
             </p>
           </div>
         </div>
 
         {/* Payment Plan Card */}
-        <div style={{ 
-          background: "white", 
-          borderRadius: "12px", 
-          padding: "30px", 
+        <div style={{
+          background: "white",
+          borderRadius: "12px",
+          padding: "30px",
           marginBottom: "20px",
           boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
         }}>
@@ -81,12 +99,12 @@ export default function ProfilePage() {
             Payment Plan
           </h2>
           <p style={{ fontSize: "14px", color: "var(--ink60)", marginBottom: "20px" }}>
-            {profile?.plan === "paid" 
+            {isPro
               ? "You are currently on the PRO plan with unlimited access to all features."
               : "Upgrade to PRO for unlimited speeches and advanced features."
             }
           </p>
-          {profile?.plan !== "paid" && (
+          {!isPro && (
             <button
               onClick={upgrade}
               disabled={paying}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/supabase/authGuard";
 
 // Groq retired the Llama chat models (they 404 as model_not_found), so the app
 // runs on gpt-oss. Note this is a REASONING model: it returns a separate
@@ -15,6 +16,9 @@ const ALLOWED_MODELS = new Set([GROQ_CHAT_MODEL, "openai/gpt-oss-20b"]);
  * and expects back a JSON object it can hand straight to JSON.parse. Keeping
  * the key here, server-side, means the browser never sees it. */
 export async function POST(request) {
+  const authed = await requireUser();
+  if (!authed.ok) return authed.response;
+
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "GROQ_API_KEY is not configured on the server" }, { status: 500 });

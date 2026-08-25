@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/supabase/authGuard";
 
 // Speech straight to English text (Sarvam's legacy speech-to-text-translate
 // endpoint) — kept separate from /stt because it takes no mode/language_code.
 const SARVAM_STT_TRANSLATE_MODEL = "saaras:v2.5";
 
 export async function POST(request) {
+  const authed = await requireUser();
+  if (!authed.ok) return authed.response;
+
   const apiKey = process.env.SARVAM_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "SARVAM_API_KEY is not configured on the server" }, { status: 500 });

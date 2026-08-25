@@ -12,7 +12,7 @@ export const CLUB_CSS = `
 .pro-body{position:relative;z-index:1;padding:22px 20px 20px}
 .pro-eye{display:inline-block;font-family:var(--bod);font-weight:800;font-size:10px;letter-spacing:.2em;
   text-transform:uppercase;color:#2E6F86;background:#F2C14E;border-radius:999px;padding:4px 11px}
-.pro-head{margin-top:12px;font-family:var(--dis);font-weight:800;font-size:22px;line-height:1.18;color:#fff}
+.pro-head{margin-top:12px;font-family:var(--dis);font-optical-sizing:auto;font-variation-settings:"SOFT" 12,"WONK" 1;font-style:italic;font-weight:800;font-size:22px;line-height:1.18;color:#fff}
 .pro-list{margin:13px 0 0;padding:0;list-style:none}
 .pro-list li{position:relative;padding-left:22px;margin-bottom:7px;font-size:13.5px;line-height:1.5;
   color:rgba(255,255,255,.9)}
