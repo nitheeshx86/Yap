@@ -509,8 +509,17 @@ function useMic() {
        gap between mic.stop() returning and MediaRecorder's own async "stop"
        event actually landing — without that, this used to resolve before
        sarvamPendingRef was ever set, and the accuracy pass never got waited
-       on at all. */
-    settled: (ms = 6000) => new Promise((resolve) => {
+       on at all.
+
+       The budget has to cover the whole accuracy pass, not just a single
+       request: a clip over 28s is decoded, split into 25s chunks and
+       re-encoded as (uncompressed) WAV before any of them are uploaded, so a
+       60s Table Topic is three sequentialish uploads of ~800KB each. The old
+       6s default expired long before that on any real answer, leaving
+       bestText() to fall back to the English-only live caption — the
+       multilingual transcript then arrived after scoring and was thrown away.
+       That is the whole bug this timeout was meant to prevent. */
+    settled: (ms = 45000) => new Promise((resolve) => {
       const pending = () => recorderStoppingRef.current || sarvamPendingRef.current;
       if (!pending()) return resolve();
       const started = Date.now();
@@ -2332,7 +2341,10 @@ function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
     const secs = typeof forced === "number" ? forced : Math.max(1, watch.value());
     const m = modeRef.current;
     mic.stop(); watch.stop();
-    if (m !== "type") await mic.settled();
+    // enter the judging screen before the accuracy pass is awaited — that wait
+    // can be long on a non-English clip, and the recording screen would
+    // otherwise stay up with a live waveform (see TableTopics.finish)
+    if (m !== "type") { setStage("analyzing"); await mic.settled(); }
     const text = (m === "type" ? typedRef.current : mic.bestText().text).trim();
 
     const r = analyseDebate(text, secs, m, stance);
@@ -2372,14 +2384,14 @@ function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
 
   const watch = useStopwatch(slot.red + 30, finish);
 
+  /* Held beat, not a countdown — same reasoning as TableTopics: this stage can
+     now begin before the accuracy pass has finished, so it waits for the
+     report to exist before serving out its minimum on-screen time. */
   useEffect(() => {
-    if (stage === "analyzing") {
-      const timer = setTimeout(() => {
-        setStage("report");
-      }, 5200);
-      return () => clearTimeout(timer);
-    }
-  }, [stage]);
+    if (stage !== "analyzing" || !rep) return;
+    const timer = setTimeout(() => setStage("report"), 5200);
+    return () => clearTimeout(timer);
+  }, [stage, rep]);
 
   /* The brief streams: tokens are shown as they arrive so the wait has
      something to watch, while the finished, formatted brief is still held
@@ -2968,11 +2980,18 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
     const m = modeRef.current;
     const voiced = m === "mic" ? Math.round(mic.voicedSeconds()) : null;
     mic.stop(); watch.stop();
-    // wait for the multilingual pass before scoring, or a Hindi answer gets
-    // judged on the English-first live transcript. This only works because
-    // mic.stop() (just above) is what triggers the recorder to hand the tape
-    // to Sarvam in the first place — settling before stopping waits for nothing.
-    if (m !== "type") await mic.settled();
+    // Show the analyzing screen *before* awaiting the accuracy pass: that wait
+    // can run to tens of seconds on a long non-English clip, and leaving the
+    // phase on "live" meant the recording screen sat there with a live
+    // waveform, reading as a hang rather than as work in progress.
+    if (m !== "type") {
+      setPhase("analyzing");
+      // wait for the multilingual pass before scoring, or a Hindi answer gets
+      // judged on the English-first live transcript. This only works because
+      // mic.stop() (just above) is what triggers the recorder to hand the tape
+      // to Sarvam in the first place — settling before stopping waits for nothing.
+      await mic.settled();
+    }
     const best = m === "type" ? { text: typedRef.current, source: "typed" } : mic.bestText();
     const text = (best.text || "").trim();
 
@@ -3019,14 +3038,16 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
 
   const watch = useStopwatch(slot.red + 30, finish);
 
+  /* The analyzing screen is a held beat, not a countdown: it may now be
+     entered before the accuracy pass has even finished (see finish()), so it
+     waits for the report to actually exist and only then serves out the rest
+     of its minimum on-screen time. Advancing on a bare 5.2s timer used to be
+     able to fire mid-settle and land on an empty report. */
   useEffect(() => {
-    if (phase === "analyzing") {
-      const timer = setTimeout(() => {
-        setPhase("report");
-      }, 5200);
-      return () => clearTimeout(timer);
-    }
-  }, [phase]);
+    if (phase !== "analyzing" || !rep) return;
+    const timer = setTimeout(() => setPhase("report"), 5200);
+    return () => clearTimeout(timer);
+  }, [phase, rep]);
 
   const toggle = (c) => setCat((v) => (v.includes(c) ? (v.length > 1 ? v.filter((x) => x !== c) : v) : [...v, c]));
 
@@ -3483,7 +3504,10 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
     const c = cardRef.current;
     const m = modeRef.current;
     mic.stop(); watch.stop();
-    if (m !== "type") await mic.settled();
+    // enter the judging screen before the accuracy pass is awaited — that wait
+    // can be long on a non-English clip, and the recording screen would
+    // otherwise stay up with a live waveform (see TableTopics.finish)
+    if (m !== "type") { setPhase("judging"); await mic.settled(); }
     const text = (m === "type" ? typedRef.current : mic.bestText().text).trim();
     setSaid(text);
     if (!text) {
