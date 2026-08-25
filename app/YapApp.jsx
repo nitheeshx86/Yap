@@ -238,27 +238,58 @@ function useMic() {
       return false;
     }
 
-    /* explicit constraints rather than `audio: true` (#7) */
+    /* explicit constraints rather than `audio: true` (#7).
+       deviceId is only pinned when that exact input still exists here: the id
+       is persisted in localStorage, so a value saved on a desktop follows the
+       account onto a phone, where it names nothing. iOS Safari (and some
+       Android WebViews) answer an unknown id with NotFoundError rather than
+       falling back, which surfaced as "No microphone found" on a phone whose
+       mic was fine. An empty device list means permission hasn't been granted
+       yet — enumerateDevices() hides ids until then — so in that case we send
+       no deviceId at all and let the browser pick the default. */
+    let pinned = "";
+    if (deviceId) {
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices();
+        const inputs = list.filter((d) => d.kind === "audioinput");
+        const known = inputs.some((d) => d.deviceId && d.deviceId === deviceId);
+        if (known) pinned = deviceId;
+      } catch (e) { /* can't tell — safer to let the browser choose */ }
+    }
+
     const constraints = {
       audio: {
         echoCancellation: true, noiseSuppression: true, autoGainControl: true,
         channelCount: 1,
-        ...(deviceId ? { deviceId: { ideal: deviceId } } : {}),
+        ...(pinned ? { deviceId: { ideal: pinned } } : {}),
       },
     };
 
     let s;
     try {
       s = await navigator.mediaDevices.getUserMedia(constraints);
-    } catch (e) {
-      const name = e && e.name;
-      setError(
-        name === "NotAllowedError" ? "You'll need to allow the microphone. Tap the padlock in the address bar, allow it, and start again."
-        : name === "NotFoundError" ? "No microphone found. Plug one in or check it isn't disabled in your system settings."
-        : name === "NotReadableError" ? "Another app is holding the microphone. Close Zoom, Meet or your recorder and try again."
-        : sandboxed ? "The preview frame blocks the microphone. Run this on localhost to record."
-        : "Couldn't open the microphone. Check permissions and try again.");
-      return false;
+    } catch (e0) {
+      /* One retry on bare `audio: true`. NotFoundError/OverconstrainedError
+         here means the constraints named something this device doesn't have,
+         not that there is no microphone — phones in particular reject the
+         processing flags above on some browsers. If the bare ask also fails,
+         the device really can't give us audio and we report e0. */
+      const n0 = e0 && e0.name;
+      const worthRetry = n0 === "NotFoundError" || n0 === "OverconstrainedError" || n0 === "TypeError";
+      if (worthRetry) {
+        try { s = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+        catch (e1) { s = null; }
+      }
+      if (!s) {
+        const name = n0;
+        setError(
+          name === "NotAllowedError" ? "You'll need to allow the microphone. Tap the padlock in the address bar, allow it, and start again."
+          : name === "NotFoundError" ? "No microphone found. If you're on a phone, check the browser has microphone permission in your system settings."
+          : name === "NotReadableError" ? "Another app is holding the microphone. Close any call or recorder app and try again."
+          : sandboxed ? "The preview frame blocks the microphone. Run this on localhost to record."
+          : "Couldn't open the microphone. Check permissions and try again.");
+        return false;
+      }
     }
     stream.current = s;
     refreshDevices();
