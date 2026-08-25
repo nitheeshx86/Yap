@@ -35,6 +35,24 @@ export const RECORDING_SCREEN_CSS = `
   .rec-light,.rec-dot,.rec-timer[data-light="red"] .rec-light{animation:none}
 }
 
+/* ---- the prompt, kept legible while speaking ---- */
+/* The topic is the thing being answered, so it outranks the chrome around it;
+   the word of the day sits under it as a quieter reminder. Both are capped in
+   width so a long prompt wraps into a readable column rather than a full-bleed
+   line, and both stay clear of the waveform below. */
+.rec-topic{max-width:34ch;margin:14px auto 0;font-family:var(--dis);font-style:italic;
+  font-weight:600;font-size:19px;line-height:1.35;color:var(--ocean-deep);text-wrap:balance}
+.rec-wotd{display:inline-flex;align-items:baseline;gap:7px;margin:9px auto 0;
+  padding:5px 12px;border-radius:999px;background:rgba(255,255,255,.42);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.55)}
+.rec-wotd span{font-family:var(--bod);font-weight:800;font-size:9.5px;letter-spacing:.13em;
+  text-transform:uppercase;opacity:.6;color:var(--ocean-deep)}
+.rec-wotd b{font-family:var(--bod);font-weight:800;font-size:13.5px;color:var(--ocean-deep)}
+@media (max-width:380px){
+  .rec-topic{font-size:17px;margin-top:11px}
+}
+
 @keyframes recBarPulse{0%,100%{opacity:.85}50%{opacity:1}}
 @keyframes recDotPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.18);opacity:.7}}
 @keyframes recButtonRing{0%{box-shadow:0 0 0 0 rgba(255,255,255,.55)}100%{box-shadow:0 0 0 22px rgba(255,255,255,0)}}

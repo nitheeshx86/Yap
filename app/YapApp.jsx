@@ -724,7 +724,7 @@ function Grass({ level, live }) {
 /* Full-screen "on air" recording view — background photo is the whole UI,
    controls float on top. Shared by Table Topics and Debate; Vocabulary's
    inline flip-card recorder is a different, smaller surface. */
-function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stopLabel = "Finish speech", slot, minSeconds = 0 }) {
+function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stopLabel = "Finish speech", slot, minSeconds = 0, topic, wotd }) {
   const level = mic?.level || [];
   const speaking = !!mic?.speaking;
 
@@ -789,6 +789,17 @@ function RecordingScreen({ title, elapsed, totalLabel, mic, onStop, onBack, stop
               </span>
             )}
           </div>
+
+          {/* The prompt and the word have to be readable *while* speaking —
+              they were previously only shown on the pick screen and in the
+              report, so a speaker who forgot either had nowhere to look. */}
+          {topic && <p className="rec-topic">{topic}</p>}
+          {wotd && wotd.w && (
+            <p className="rec-wotd">
+              <span>word of the day</span>
+              <b>{wotd.w}</b>
+            </p>
+          )}
         </div>
 
         <div className="flex flex-1 flex-col items-center justify-center gap-1">
@@ -2742,6 +2753,7 @@ function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
             onBack={() => { mic.stop(); watch.stop(); watch.reset(); setStage("speak"); }}
             stopLabel="Finish"
             slot={slot}
+            topic={topic}
           />
         )}
       </div>
@@ -3439,6 +3451,8 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
           onBack={() => { mic.stop(); watch.stop(); watch.reset(); setPhase("pick"); }}
           slot={slot}
           minSeconds={slot.id}
+          topic={topic}
+          wotd={wotd}
         />
       )}
 
@@ -4192,7 +4206,6 @@ function OnboardingFlow({ onDone, mic }) {
     setRecState(ok ? "live" : "typed");
     watch.start();
   };
-  const startTyped = () => { setRecState("typed"); watch.start(); };
 
   const next = () => setStep((s) => Math.min(LAST, s + 1));
   const back = () => setStep((s) => Math.max(0, s - 1));
@@ -4334,6 +4347,11 @@ function OnboardingFlow({ onDone, mic }) {
             <Ring pct={watch.t / 15} live label="write while the ring closes">
               <b className="ring2-num">{Math.max(0, 15 - watch.t)}</b>
             </Ring>
+            {/* only reached when the mic refused to open — typing is the way
+                out of a dead end here, not a route we offer up front */}
+            <p className="onb-hint" style={{ marginBottom: 8 }}>
+              {mic.error || "The microphone didn't open."} Write your answer instead and it's still scored.
+            </p>
             <textarea className="typebox" rows={4} value={typed} onChange={(e) => setTyped(e.target.value)}
               style={{ background: "rgba(246,251,245,.06)", color: "inherit", borderColor: "rgba(246,251,245,.22)" }}
               placeholder="Write it the way you'd say it out loud — fillers and all." />
@@ -4415,7 +4433,6 @@ function OnboardingFlow({ onDone, mic }) {
         <>
           <button className="onb-btn" onClick={startRep}>
             <span><Icon name="mic" size={19} /> Start recording</span></button>
-          <button className="onb-btn ghost" style={{ marginTop: 9 }} onClick={startTyped}>Write it instead</button>
           <p className="onb-hint">no account, nothing uploaded, nothing saved unless you continue</p>
         </>
       );
