@@ -4835,7 +4835,7 @@ function YapApp() {
   const tabRefs = useRef({});
   const [sliderStyle, setSliderStyle] = useState({ left: 0, width: 0 });
   const [tab, setTab] = useState("club");
-  const { user, profile: authProfile, loading: authLoading, signInWithGoogle } = useAuth();
+  const { user, profile: authProfile, loading: authLoading, signInWithGoogle, refreshProfile } = useAuth();
   const { meState, meLoading, meError, refreshMeState, setMeState } = useMeState(user);
 
   /* Free-trial balance for the UI. Hydrated from /api/me/state and then kept
@@ -4901,7 +4901,12 @@ function YapApp() {
      flashing the sign-in screen at a signed-in user is worse than a beat of
      blank. */
   const [replayIntro, setReplayIntro] = useState(false);
-  const intro = replayIntro || !user || !authProfile?.onboarding_done;
+  /* Set the moment onboarding finishes, so the hand-off doesn't wait on
+     refreshProfile()'s round trip. Without it there is a window where the
+     save has succeeded but the re-read hasn't landed, and `intro` below is
+     still true — which puts the user back at the start of the flow. */
+  const [justOnboarded, setJustOnboarded] = useState(false);
+  const intro = replayIntro || !user || (!authProfile?.onboarding_done && !justOnboarded);
   const wotd = useMemo(() => wordOfTheDay(lib.words), [lib.words]);
   const mic = useMic();
   const [preselectedTopic, setPreselectedTopic] = useState(null);
@@ -5050,7 +5055,14 @@ function YapApp() {
         <style>{CSS}</style><style>{ONB_CSS}</style>
         <OnboardingFlow mic={mic} user={user} authProfile={authProfile}
           authLoading={authLoading} signInWithGoogle={signInWithGoogle}
-          onDone={(p) => { setProfile(p); setReplayIntro(false); mic.stop(); refreshMeState(); }} />
+          onDone={(p) => {
+            setProfile(p); setReplayIntro(false); setJustOnboarded(true);
+            mic.stop(); refreshMeState();
+            // `onboarding_done` was just flipped server-side. Without this the
+            // hook's cached profile still reads false, and on the next reload
+            // the user is sent back into the flow they just finished.
+            refreshProfile();
+          }} />
       </div>
     );
   }

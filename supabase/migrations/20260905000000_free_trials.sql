@@ -16,7 +16,8 @@
 --   * the ledger is append-only to everyone but the service role. There is no
 --     update or delete policy, and no client-writable path at all.
 --
--- Additive only. Safe to paste into the Supabase Dashboard SQL editor.
+-- Additive only, and idempotent: safe to paste into the Supabase Dashboard SQL
+-- editor and safe to run more than once.
 
 -- ---------------------------------------------------------------------------
 -- 1. free_trial_uses — append-only ledger, one row per consumed trial
@@ -43,6 +44,11 @@ alter table public.free_trial_uses enable row level security;
 -- Read-own only: the UI shows "1 of 3 free reports left". No insert, update or
 -- delete policy exists, so even a stolen anon key cannot mint or erase a use;
 -- only the service role (via the function below) writes here.
+--
+-- Dropped first so the whole file stays re-runnable: `create policy` has no
+-- `if not exists`, so a second run of this migration would otherwise abort
+-- here (42710) and skip everything below it.
+drop policy if exists "free_trial_uses_select_own" on public.free_trial_uses;
 create policy "free_trial_uses_select_own"
   on public.free_trial_uses for select
   to authenticated
@@ -89,10 +95,11 @@ $$;
 --   consumed  -> allowed, one trial spent
 --   exhausted -> denied
 --
--- The race is closed by the INSERT ... on conflict do nothing + the count
--- being taken INSIDE the same statement's snapshot: N parallel calls with N
--- distinct event ids serialise on the unique index, and any that would push
--- the total past the limit insert nothing and come back exhausted.
+-- The race is closed by the per-user advisory lock taken at the top of the
+-- body: N parallel calls with N distinct event ids queue behind it one at a
+-- time, so each re-counts against the rows the others already wrote, and any
+-- past the limit come back exhausted. (The unique index alone would NOT do
+-- this — distinct event ids never collide on it.)
 
 create or replace function public.consume_free_trial(
   p_user_id uuid,
