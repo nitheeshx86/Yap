@@ -97,6 +97,39 @@ export const ONB_CSS = `
 .onb-btn:focus-visible,.onb-back:focus-visible,.onb-skip:focus-visible,.pod:focus-visible{outline:3px solid #FF9F7F;outline-offset:3px}
 .onb-btn>span{display:inline-flex;align-items:center;gap:8px}
 .onb-kicker::after{content:"";height:1px;flex:1;background:currentColor;opacity:.2}
+/* ---------------------------------------------------------------------------
+   The Google gate. One button, centred, in the same night palette as the rest
+   of the sequence — the sign-in is a beat in the story, not a system dialog.
+   --------------------------------------------------------------------------- */
+.gsign{width:100%;border:none;border-radius:999px;padding:15px 24px;font-size:15.5px;font-weight:700;font-family:var(--bod);background:#F6FBF5;color:#1B3A42;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:11px;box-shadow:0 10px 26px rgba(0,0,0,.18);transition:.2s cubic-bezier(.2,.9,.3,1)}
+.gsign:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 14px 30px rgba(0,0,0,.22)}
+.gsign:active:not(:disabled){transform:translateY(0)}
+.gsign:disabled{opacity:.55;cursor:progress}
+.gsign svg{flex:0 0 19px}
+.gsign:focus-visible{outline:3px solid #FF9F7F;outline-offset:3px}
+.onb[data-dawn="1"] .gsign{background:#fff;color:var(--ink);box-shadow:0 10px 26px rgba(31,79,91,.16)}
+/* the three promises under the button — why signing in is worth it */
+.vows{display:flex;flex-direction:column;gap:12px;margin:6px 0 4px}
+.vow{display:flex;gap:12px;align-items:flex-start;animation:rise .55s cubic-bezier(.2,.9,.35,1) both}
+.vow i{flex:0 0 26px;height:26px;border-radius:9px;display:grid;place-items:center;background:rgba(255,159,127,.18);color:#FF9F7F;font-style:normal;font-size:13px;font-weight:700}
+.vow b{display:block;font-size:14.5px;font-weight:700;margin-bottom:2px}
+.vow span{font-size:13px;line-height:1.5;opacity:.7}
+.onb[data-dawn="1"] .vow i{background:rgba(255,159,127,.22);color:var(--coral-deep)}
+.onb-err{font-family:var(--bod);font-size:12.5px;line-height:1.5;color:#FFC9B6;background:rgba(232,103,74,.16);border:1px solid rgba(232,103,74,.4);border-radius:14px;padding:10px 13px;margin-top:12px}
+.onb[data-dawn="1"] .onb-err{color:var(--bad);background:rgba(232,103,74,.1)}
+/* signed-in confirmation chip */
+.whochip{display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(246,251,245,.22);background:rgba(246,251,245,.06);border-radius:999px;padding:7px 15px 7px 7px;font-size:13px;font-weight:600;margin-bottom:14px}
+.whochip img{width:26px;height:26px;border-radius:50%;display:block}
+.whochip em{font-style:normal;opacity:.6;font-weight:500}
+.onb[data-dawn="1"] .whochip{border-color:var(--line);background:var(--surf1)}
+/* "how it works" three-beat strip */
+.beats{display:flex;flex-direction:column;gap:10px;margin:4px 0 10px}
+.beat{display:flex;gap:14px;align-items:center;border:1px solid rgba(246,251,245,.16);background:rgba(246,251,245,.04);border-radius:20px;padding:14px 16px;animation:rise .55s cubic-bezier(.2,.9,.35,1) both}
+.beat u{flex:0 0 34px;height:34px;border-radius:12px;display:grid;place-items:center;text-decoration:none;font-family:var(--dis);font-weight:700;font-size:17px;background:rgba(255,159,127,.2);color:#FF9F7F}
+.beat b{display:block;font-size:14.5px;font-weight:700;margin-bottom:2px}
+.beat span{font-size:12.8px;line-height:1.45;opacity:.7}
+.onb[data-dawn="1"] .beat{border-color:var(--line);background:var(--surf1)}
+.onb[data-dawn="1"] .beat u{color:var(--coral-deep)}
 @media (prefers-reduced-motion:reduce){
   .onb *{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }

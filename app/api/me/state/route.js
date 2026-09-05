@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser, getAdminClient } from "@/lib/supabase/authGuard";
+import { requireUser, getAdminClient, readAccessState } from "@/lib/supabase/authGuard";
 import { todayLocalDate } from "@/lib/yap/date";
 
 /**
@@ -82,6 +82,18 @@ export async function GET() {
   const entitlementActive =
     !!entitlement && entitlement.status === "active" && (!entitlement.expires_at || new Date(entitlement.expires_at) > new Date());
 
+  // Free-trial balance, so the UI can say "2 free reports left" and show the
+  // paywall before a recording starts. Advisory only: the real decision is
+  // made — and the trial actually spent — inside requireReportAccess at the
+  // moment a report is generated. A client that ignores this learns nothing
+  // and gains nothing.
+  let access = { entitled: entitlementActive, used: 0, remaining: 0, limit: 0 };
+  try {
+    access = await readAccessState(admin, user.id);
+  } catch (e) {
+    console.error("[YAP] me/state: access state lookup failed", { userId: user.id });
+  }
+
   return NextResponse.json({
     user: { id: user.id, email: user.email },
     profile: profile || null,
@@ -95,5 +107,6 @@ export async function GET() {
       product: "pro",
       expires_at: entitlement?.expires_at ?? null,
     },
+    access,
   });
 }

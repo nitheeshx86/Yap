@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/supabase/authGuard";
+import { requireUser, requireReportAccess } from "@/lib/supabase/authGuard";
+import { getTask } from "@/lib/yap/tasks";
 
 // Sarvam's own model: native to Indian languages, so a reply reads far less
 // like a translation than routing it through an English-first model first.
 const SARVAM_CHAT_MODEL = "sarvam-105b";
 
+/* This is the same evaluation as /api/groq/chat, written by a different
+ * model — so it is metered identically. It used to accept a free-form
+ * `messages` array, which would have made it a one-line bypass of the
+ * paywall (and of the prompt ownership): send the evaluator prompt here
+ * instead and get the report unmetered. It now takes the same server-owned
+ * `task` name, and builds the messages itself. */
 export async function POST(request) {
-  const authed = await requireUser();
-  if (!authed.ok) return authed.response;
-
-  const apiKey = process.env.SARVAM_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json({ error: "SARVAM_API_KEY is not configured on the server" }, { status: 500 });
-  }
-
   let body;
   try {
     body = await request.json();
@@ -21,10 +20,31 @@ export async function POST(request) {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const { messages, max_tokens: maxTokens, temperature } = body || {};
-  if (!Array.isArray(messages) || !messages.length) {
-    return NextResponse.json({ error: "missing 'messages' field" }, { status: 400 });
+  const { task: taskName, user, directive, temperature, client_event_id: clientEventId } = body || {};
+
+  const task = getTask(taskName);
+  if (!task) {
+    return NextResponse.json({ error: "unknown_task" }, { status: 400 });
   }
+  if (!user) {
+    return NextResponse.json({ error: "missing 'user' field" }, { status: 400 });
+  }
+
+  const authed = task.metered
+    ? await requireReportAccess({ clientEventId, kind: task.kind })
+    : await requireUser();
+  if (!authed.ok) return authed.response;
+
+  const apiKey = process.env.SARVAM_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "SARVAM_API_KEY is not configured on the server" }, { status: 500 });
+  }
+
+  const messages = [
+    { role: "system", content: task.system + (typeof directive === "string" ? directive.slice(0, 2000) : "") },
+    { role: "user", content: String(user).slice(0, 24000) },
+  ];
+  const maxTokens = task.maxTokens;
 
   // sarvam-105b is a reasoning model: it spends tokens on a hidden
   // reasoning_content pass before it ever writes the JSON in `content`, so
@@ -58,5 +78,5 @@ export async function POST(request) {
 
   const data = await res.json();
   const content = data.choices?.[0]?.message?.content || "";
-  return NextResponse.json({ content });
+  return NextResponse.json({ content, access: authed.ctx.access ?? null });
 }

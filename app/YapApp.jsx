@@ -14,10 +14,10 @@ import {
 import { langName, langProfile } from "@/lib/yap/lang";
 import {
   groqTranscribe, GROQ_FAST_MODEL, sarvamReady, sarvamTranscribe,
-  sarvamTransliterate, askClaude, EVAL_SYS,
+  sarvamTransliterate, askClaude, onAccessChange,
 } from "@/lib/yap/api";
 import {
-  loadLibrary, checkWordUsage, usageGrammar, WORD_JUDGE_SYS, pick, spinTick,
+  loadLibrary, checkWordUsage, usageGrammar, pick, spinTick,
   STAGES, stageFor, wordOfTheDay, usedWord,
 } from "@/lib/yap/store";
 import { detectTimezone, todayLocalDate } from "@/lib/yap/date";
@@ -2277,29 +2277,60 @@ function splitCounter(text) {
   return m ? [m[1], m[2]] : [t];
 }
 
-const BRIEF_SYS = `You prepare a debate brief for an Indian college student who has two minutes to get ready. Be concrete and honest — never invent statistics, and never cite a study you are not confident exists.
-Return ONLY raw JSON:
-{"summary":"what this debate is really about, 1-2 sentences, framed for their chosen side",
-"points":["3-4 arguments FOR THEIR SIDE, each one sentence, each a different line of attack"],
-"counters":["2-3 objections the other side will raise, each with a short answer in the same string"],
-"facts":["2-3 verifiable facts or figures, each with its source named inline. If you are not confident, return an empty array rather than a plausible-sounding number."],
-"examples":["1-2 concrete real cases, Indian where possible"]}
-Write for someone about to speak out loud, not for an essay: short, sayable sentences.`;
+/* --------------------------- PAYWALL / TRIALS ----------------------------- */
 
-const DEBATE_EVAL_SYS = `You are judging one debate speech. The speaker chose a side before speaking and had limited prep time. The text is a speech transcript — no punctuation, ignore it.
-Return ONLY raw JSON:
-{"argument":"the quality of the case they built, 1-2 sentences, quoting them",
-"consistency":"did they hold their chosen side, and where did they wobble, 1-2 sentences",
-"evidence":"what they used as support and what was missing, 1 sentence",
-"counter":"how they handled the other side, or that they ignored it, 1 sentence",
-"fix":"the single change that would most improve the next round, 2 sentences, concrete"}
-Judge the case, never the position — a well-argued side you disagree with scores high. Be direct, no praise padding.`;
+/* Shown in place of the AI coaching when the free trials are spent. The rest
+   of the report (timing, filler words, grammar — everything computed locally)
+   still renders: the user keeps what their session earned, and only the AI
+   evaluation is withheld. */
+function PaywallCard({ access, email, onPaid }) {
+  const { upgrade, paying, payError } = useUpgrade({ email, onPaid });
+  const limit = access?.limit ?? 3;
+  return (
+    <div className="card sun pcard" style={{ marginTop: 12 }}>
+      <CornerDecor emoji="🔒" />
+      <PearlOpenHeader label="Your free reports are used up" />
+      <p style={{ fontSize: 15, lineHeight: 1.65 }}>
+        You&apos;ve used all {limit} free evaluations. Everything above — your timing, filler
+        words and grammar — is yours to keep. The coach&apos;s written feedback is part of Yap PRO.
+      </p>
+      <ul className="pro-list">
+        <li>Unlimited evaluations, every mode</li>
+        <li>Debate judging with research briefs</li>
+        <li>Full history and progress tracking</li>
+      </ul>
+      <button className="pro-cta" onClick={upgrade} disabled={paying}>
+        {paying ? "Opening payment…" : "Upgrade — ₹199/month"}
+      </button>
+      {payError && <p className="pro-err">{payError}</p>}
+    </div>
+  );
+}
+
+/* The remaining-trials line, shown to free users before they record so the
+   limit is never a surprise at the end of a session. */
+function TrialMeter({ access }) {
+  if (!access || access.entitled) return null;
+  const left = access.remaining ?? 0;
+  return (
+    <p className="ex" style={{ marginTop: 0, marginBottom: 12 }}>
+      {left > 0
+        ? `${left} of ${access.limit} free evaluations left.`
+        : "No free evaluations left — upgrade to Yap PRO to get coaching on your next speech."}
+    </p>
+  );
+}
+
+/* BRIEF_SYS and DEBATE_EVAL_SYS moved server-side to lib/yap/tasks.js, along
+   with the Table Topics and vocabulary prompts — they are the paid product,
+   and shipping them in the browser bundle would let anyone run the evaluator
+   unmetered. The call sites below name a task instead. */
 
 /* ------------------------------ DEBATE UI --------------------------------- */
 
 
 
-function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
+function DebateMode({ mic, onFinish, lib, profile, submitSession, access, userEmail, onPaid }) {
   const [stage, setStage] = useState("stance");
   const [topic, setTopic] = useState(() => pick(TOPICS["Placement & GD"]));
   const [spinning, setSpinning] = useState(false);
@@ -2372,13 +2403,14 @@ function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
 
     if (r.unintelligible || r.wc < 15) { setAiState("skip"); return; }
     setAiState("loading");
-    askClaude(DEBATE_EVAL_SYS,
+    askClaude("debate_eval",
       `Motion: "${topic}"\nThey argued: ${stanceById(stance).label}\nPrep time: ${prepSeconds}s\n` +
       `Measured: stance consistency ${r.consistency.score}, evidence ${r.evidence}, ` +
       `counterargument ${r.counter}, argument ${r.argument}, words ${r.wc}.\n` +
-      `Transcript:\n"""${text}"""`, 900)
+      `Transcript:\n"""${text}"""`,
+      { clientEventId: clientEventIdRef.current })
       .then((j) => { setAi(j); setAiState("done"); })
-      .catch(() => setAiState("offline"));
+      .catch((e) => setAiState(e && e.code === "trial_exhausted" ? "paywall" : "offline"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mic, stance, slot, topic, prepSeconds, onFinish, submitSession]);
 
@@ -2428,7 +2460,9 @@ function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
       else pending = payload;                 // hold until the floor passes
     };
 
-    askClaude(BRIEF_SYS, `Motion: "${topic}"\nThey are arguing: ${stanceById(stance).label} (${stanceById(stance).verb} the motion).`, 800, undefined, GROQ_FAST_MODEL)
+    askClaude("debate_brief",
+      `Motion: "${topic}"\nThey are arguing: ${stanceById(stance).label} (${stanceById(stance).verb} the motion).`,
+      { fastModel: GROQ_FAST_MODEL })
       .then((j) => settle({ data: { ...j, stance }, local: false }))
       .catch(() => settle({ data: localBrief(topic, stance), local: true }));
   };
@@ -2480,6 +2514,7 @@ function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
           know what you'll say, and you're scored on whether the case survives your own speech.
         </p>
         <Notice mic={mic} />
+        <TrialMeter access={access} />
         <LanguageBar mic={mic} />
 
         <div className="card sky">
@@ -2891,6 +2926,7 @@ function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
           and stands on its own.
         </div></div>
       )}
+      {aiState === "paywall" && <PaywallCard access={access} email={userEmail} onPaid={onPaid} />}
       {aiState === "done" && ai && (
         <div className="card sun">
           <div className="role">
@@ -2927,7 +2963,7 @@ function DebateMode({ mic, onFinish, lib, profile, submitSession }) {
 
 /* ============================== TABLE TOPICS ============================== */
 
-function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, clearPreselected, submitSession }) {
+function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, clearPreselected, submitSession, access, userEmail, onPaid }) {
   const allTopics = useMemo(() => {
     const merged = { ...TOPICS };
     (lib.topics || []).forEach((t) => {
@@ -3030,9 +3066,13 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
 
     if (r.unintelligible || r.wc < 15) { setAiState("skip"); return; }
     setAiState("loading");
-    askClaude(EVAL_SYS, `Topic: "${topic}"\nTime slot: ${slot.label}\nSeconds spoken: ${secs}\nTranscript:\n"""${text}"""`, 1100)
+    askClaude("topic_eval",
+      `Topic: "${topic}"\nTime slot: ${slot.label}\nSeconds spoken: ${secs}\nTranscript:\n"""${text}"""`,
+      // Same idempotency key as the session submit: retrying this one attempt
+      // must not spend a second free trial.
+      { clientEventId: clientEventIdRef.current })
       .then((j) => { setAi(j); setAiState("done"); })
-      .catch(() => setAiState("offline"));
+      .catch((e) => setAiState(e && e.code === "trial_exhausted" ? "paywall" : "offline"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mic, topic, slot, onFinish, wotd, submitSession]);
 
@@ -3304,6 +3344,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
         {aiState === "offline" && <div className="tip" style={{ marginTop: 12 }}>
           This evaluation was written from your measured numbers. Connect an API key for a written one that quotes you directly.
         </div>}
+        {aiState === "paywall" && <PaywallCard access={access} email={userEmail} onPaid={onPaid} />}
       </div>
     );
 
@@ -3411,6 +3452,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
             like a real meeting.
           </p>
           <Notice mic={mic} />
+          <TrialMeter access={access} />
         </>
       )}
 
@@ -3483,7 +3525,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
 /* ================================ VOCAB =================================== */
 
 
-function Vocabulary({ mic, onFinish, wotd, lib }) {
+function Vocabulary({ mic, onFinish, wotd, lib, access, userEmail, onPaid }) {
   const deck = useMemo(() => [...(lib.words || []), ...VOCAB], [lib.words]);
   const [i, setI] = useState(() => Math.max(0, deck.findIndex((v) => v.w === wotd.w)));
   const [flipped, setFlipped] = useState(false);
@@ -3499,6 +3541,10 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
   const typedRef = useRef(""); typedRef.current = typed;
   const modeRef = useRef("mic"); modeRef.current = mode;
   const cardRef = useRef(card); cardRef.current = card;
+  // One idempotency key per word attempt, minted fresh in next()/record().
+  // Retrying the same attempt must not spend a second free trial; moving to a
+  // new word is a new attempt and costs one.
+  const clientEventIdRef = useRef(crypto.randomUUID());
 
   const judge = useCallback(async () => {
     const c = cardRef.current;
@@ -3518,8 +3564,9 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
     const usage = checkWordUsage(c.w, text);
     const grammar = usageGrammar(c.w, usage.unit || text);
     setPhase("judging");
-    askClaude(WORD_JUDGE_SYS,
-      `Target word: "${c.w}" (${c.p})${c.d ? ` — meaning: ${c.d}` : ""}${c.e ? `\nIntended use: "${c.e}"` : ""}\nWhat they said: """${text}"""`, 500)
+    askClaude("vocab_judge",
+      `Target word: "${c.w}" (${c.p})${c.d ? ` — meaning: ${c.d}` : ""}${c.e ? `\nIntended use: "${c.e}"` : ""}\nWhat they said: """${text}"""`,
+      { clientEventId: clientEventIdRef.current })
       .then((j) => {
         // The model can pass something the local check knows is only a mention.
         const used = j.used && usage.used;
@@ -3532,7 +3579,15 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
           onFinish({ xp: 20, seconds: 30, kind: "vocab" });
         }
       })
-      .catch(() => {
+      .catch((e) => {
+        // A spent trial is not an outage: falling through to the local
+        // judgement here would hand an exhausted user the very result the
+        // paywall just withheld. Show the paywall instead.
+        if (e && e.code === "trial_exhausted") {
+          setResult({ paywalled: true, used: false, correct: false, usage, grammar, better: "", verdict: "" });
+          setPhase("result");
+          return;
+        }
         const ok = usage.used && usage.natural && grammar.length === 0;
         setResult({
           used: usage.used, correct: ok, usage, grammar, better: "",
@@ -3556,9 +3611,14 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
       setPhase("result");
       return;
     }
+    clientEventIdRef.current = crypto.randomUUID();   // new attempt, new key
     setMode("mic"); setPhase("live"); watch.start();
   };
-  const next = () => { setI((v) => (v + 1) % deck.length); setFlipped(false); setPhase("idle"); setResult(null); setSaid(""); setTyped(""); watch.reset(); };
+  const next = () => {
+    setI((v) => (v + 1) % deck.length); setFlipped(false); setPhase("idle");
+    setResult(null); setSaid(""); setTyped(""); watch.reset();
+    clientEventIdRef.current = crypto.randomUUID();   // new word, new attempt
+  };
 
   const isWotd = card.w === wotd.w;
 
@@ -3571,6 +3631,7 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
         a word joins your bank only when you've used it correctly out loud.
       </p>
       <Notice mic={mic} />
+      <TrialMeter access={access} />
 
       <div className={"card " + (isWotd ? "sun" : "sky")}>
         {isWotd && <div className="tag">word of the day</div>}
@@ -3623,7 +3684,11 @@ function Vocabulary({ mic, onFinish, wotd, lib }) {
 
       {phase === "judging" && <div className="card"><span className="spin" />Checking how you used it…</div>}
 
-      {phase === "result" && result && (
+      {phase === "result" && result && result.paywalled && (
+        <PaywallCard access={access} email={userEmail} onPaid={onPaid} />
+      )}
+
+      {phase === "result" && result && !result.paywalled && (
         <div className={"card " + (result.correct ? "moss" : "coral")}>
           <div className="eye">{result.correct ? "It's yours" : result.used ? "Close" : "Not yet"}</div>
           {said && <p className="ex" style={{ margin: "8px 0" }}>You said: “{said}”</p>}
@@ -4198,8 +4263,31 @@ function BaselineDial({ label, value, delay }) {
   );
 }
 
-function OnboardingFlow({ onDone, mic }) {
-  const [step, setStep] = useState(0);
+/* The Google mark, inline — the button must not depend on a remote asset,
+   and the brand colours are fixed by Google's own guidelines. */
+function GoogleMark({ size = 19 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+      <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h11.8c-.5 2.7-2 5-4.4 6.6v5.5h7.1c4.2-3.8 6.6-9.5 6.6-16.1z" />
+      <path fill="#34A853" d="M24 46c6 0 11-2 14.5-5.4l-7.1-5.5c-2 1.3-4.5 2.1-7.4 2.1-5.7 0-10.6-3.9-12.3-9.1H4.3v5.7C7.8 41 15.3 46 24 46z" />
+      <path fill="#FBBC05" d="M11.7 28.1c-.4-1.3-.7-2.7-.7-4.1s.3-2.8.7-4.1v-5.7H4.3A22 22 0 0 0 2 24c0 3.6.9 6.9 2.3 9.8l7.4-5.7z" />
+      <path fill="#EA4335" d="M24 10.8c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4.2 29.9 2 24 2 15.3 2 7.8 7 4.3 14.2l7.4 5.7c1.7-5.2 6.6-9.1 12.3-9.1z" />
+    </svg>
+  );
+}
+
+/* Screen indices, named — the sequence has been reordered once already and
+   bare numbers made every guard in the flow a puzzle. Module scope so the
+   initial-step calculation can use it too. */
+const S = { HOOK: 0, HOW: 1, GATE: 2, GOALS: 3, BLOCKS: 4, REP: 5, BASELINE: 6, OPEN: 7 };
+
+function OnboardingFlow({ onDone, mic, user, authProfile, authLoading, signInWithGoogle }) {
+  /* Signing in navigates away to Google and comes back through /auth/callback,
+     which remounts this component from scratch. Someone returning from that
+     round trip has already read the first two screens and already has an
+     account, so they resume at the questions rather than replaying the pitch.
+     A fresh visitor still starts at screen 0. */
+  const [step, setStep] = useState(() => (user ? S.GOALS : S.HOOK));
   const [goals, setGoals] = useState([]);
   const [blocks, setBlocks] = useState([]);
   const [prompt] = useState(() => pick(INTRO_PROMPTS));
@@ -4207,10 +4295,37 @@ function OnboardingFlow({ onDone, mic }) {
   const [typed, setTyped] = useState("");
   const [baseline, setBaseline] = useState(null);
   const [dawn, setDawn] = useState(false);
-  const LAST = 7;
+  const [signingIn, setSigningIn] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const LAST = S.OPEN;
+
+  const signedIn = !!user;
+
+  /* The gate is the one screen you cannot walk past — and equally, one you can
+     never be stuck on once you're through it. Signing in is a full page
+     navigation, so the normal path remounts this component and the initial
+     step above already lands a returning user on the questions. This derives
+     the same answer for the case where a session appears without a remount
+     (a token refresh, or a sign-in completed in another tab), instead of
+     writing state during render to correct it. */
+  const view = step === S.GATE && signedIn ? S.GOALS : step;
 
   const toggle = (setter) => (id) =>
     setter((v) => (v.includes(id) ? v.filter((x) => x !== id) : [...v, id]));
+
+  const signIn = async () => {
+    setErr(null);
+    setSigningIn(true);
+    try {
+      await signInWithGoogle();
+      // On success the browser navigates to Google; nothing after this runs.
+    } catch (e) {
+      setSigningIn(false);
+      setErr("Google sign-in didn't open. Check that pop-ups aren't blocked, then try again.");
+    }
+  };
 
   const finishRep = useCallback(async (secs) => {
     mic.stop(); watch.stop();
@@ -4219,7 +4334,7 @@ function OnboardingFlow({ onDone, mic }) {
     const r = analyse(text, Math.max(1, secs || watch.value() || 15), recState === "typed" ? "type" : "mic");
     setBaseline(r);
     setRecState("done");
-    setStep(6);
+    setStep(S.BASELINE);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mic, recState, typed]);
 
@@ -4231,30 +4346,55 @@ function OnboardingFlow({ onDone, mic }) {
     watch.start();
   };
 
-  const next = () => setStep((s) => Math.min(LAST, s + 1));
-  const back = () => setStep((s) => Math.max(0, s - 1));
+  const next = () => setStep(Math.min(LAST, view + 1));
+  /* Never step back into the gate or past it: once you're signed in, that
+     screen has no job left, and the rep screen can't be re-entered either. */
+  const back = () => setStep(Math.max(signedIn ? S.GOALS : 0, view - 1));
 
-  const complete = () => {
+  const localProfile = () => saveProfile({
+    done: true, goals, blocks,
+    baseline: baseline ? {
+      overall: baseline.overall, fluency: baseline.fluency, clarity: baseline.clarity100,
+      structure: baseline.structure, accuracy: baseline.accuracy, range: baseline.range,
+      fillers: baseline.fillerCount, wpm: baseline.wpm, at: Date.now(),
+    } : null,
+  });
+
+  /* Finish: persist the answers server-side first, so opening Yap on another
+     device doesn't replay the whole sequence. The baseline stays local — it's
+     derived from a transcript, and transcripts are never sent anywhere. */
+  const complete = async () => {
+    setErr(null);
+    setSaving(true);
+    try {
+      const res = await fetch("/api/me/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          goals, blocks,
+          display_name: user?.user_metadata?.full_name || user?.user_metadata?.name || null,
+          timezone: detectTimezone(),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || "Could not save your answers");
+      }
+    } catch (e) {
+      setSaving(false);
+      setErr(`${e.message}. Check your connection and try again.`);
+      return;
+    }
+    setSaving(false);
     setDawn(true);
-    setTimeout(() => {
-      onDone(saveProfile({
-        done: true, goals, blocks,
-        baseline: baseline ? {
-          overall: baseline.overall, fluency: baseline.fluency, clarity: baseline.clarity100,
-          structure: baseline.structure, accuracy: baseline.accuracy, range: baseline.range,
-          fillers: baseline.fillerCount, wpm: baseline.wpm, at: Date.now(),
-        } : null,
-      }));
-    }, 1150);
+    setTimeout(() => onDone(localProfile()), 1150);
   };
-
-  const skip = () => onDone(saveProfile({ done: true, goals, blocks, baseline: null }));
 
   /* map the blocks a user picked onto the role-players that watch for them */
   const watchers = [...new Set(blocks.map((b) => (BLOCKS.find((x) => x.id === b) || {}).watches).filter(Boolean))];
 
   const SCREENS = [
-    /* 0 — the problem */
+    /* 0 — the hook: what Yap is for */
     () => (
       <>
         <div className="onb-kicker">YAP</div>
@@ -4269,29 +4409,60 @@ function OnboardingFlow({ onDone, mic }) {
         </Ring>
       </>
     ),
-    /* 1 — the fear */
+    /* 1 — what the app actually does */
     () => (
       <>
-        <h1 className="onb-h"><Words text="Your brain has the answer." /><br />
-          <em><Words text="Your mouth negotiates." delay={0.45} /></em></h1>
-        <p className="onb-p">Public speaking outranks these as a stated fear. Nobody is taught the way out of it — they're just told to relax.</p>
-        <div className="fears">
-          {[["Heights", "M4 20 L12 6 L20 20 Z"], ["Spiders", "M12 8 a4 4 0 1 0 .1 0 M4 6 L9 11 M20 6 L15 11 M4 18 L9 14 M20 18 L15 14"], ["Death", "M12 3 a7 7 0 0 0 -4 13 v3 h8 v-3 a7 7 0 0 0 -4 -13"]].map(([n, d], i) => (
-            <div className="fear" key={n} style={{ animationDelay: `${0.25 + i * 0.12}s` }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d={d} /></svg>
-              <b>{n}</b>
+        <div className="onb-kicker">how Yap works</div>
+        <h1 className="onb-h"><Words text="A speaking club that fits" /> <em><Words text="in a minute." delay={0.5} /></em></h1>
+        <div className="beats">
+          {[
+            ["1", "You get a topic", "No prep, no script. One prompt, and you talk for a minute."],
+            ["2", "Four role-players score it", "Timer, Ah-Counter, Grammarian and Evaluator — the same roles a real club runs."],
+            ["3", "You watch the numbers move", "Flow, clarity, structure, grammar and range, measured every single rep."],
+          ].map(([n, t, d], i) => (
+            <div className="beat" key={n} style={{ animationDelay: `${0.15 + i * 0.11}s` }}>
+              <u>{n}</u>
+              <div><b>{t}</b><span>{d}</span></div>
             </div>
           ))}
         </div>
-        <div className="mascrow" style={{ marginTop: 8 }}>
-          <Mascot mood="worried" size={76} className="masc-peek" />
-          <p className="onb-p" style={{ margin: 0, opacity: .9 }}>Nerves aren't a personality trait. They're an untrained reflex, and reflexes respond to reps.</p>
-        </div>
+        <p className="onb-p">Word of the day and a debate table are there too, for the days you want more than a minute.</p>
       </>
     ),
-    /* 2 — goals */
+    /* 2 — the gate. Mandatory: there is no skip and no continue button here. */
     () => (
       <>
+        <div className="onb-kicker">first, who's speaking</div>
+        <h1 className="onb-h"><Words text="Progress only means something" /><br />
+          <em><Words text="if it's yours." delay={0.55} /></em></h1>
+        <p className="onb-p">Yap measures you against you. That needs an account — one tap, nothing to fill in.</p>
+        <div className="vows">
+          {[
+            ["◈", "Your streak survives everything", "Close the tab, switch to your phone, come back in a week. It's still counting."],
+            ["◐", "Every rep is compared to your first", "The baseline you're about to record is the line every later score is drawn against."],
+            ["○", "Nothing you say is stored", "Transcripts are analysed in the moment and dropped. We keep scores and streaks, never your words."],
+          ].map(([ic, t, d], i) => (
+            <div className="vow" key={t} style={{ animationDelay: `${0.2 + i * 0.1}s` }}>
+              <i>{ic}</i>
+              <div><b>{t}</b><span>{d}</span></div>
+            </div>
+          ))}
+        </div>
+        {err && <div className="onb-err" role="alert">{err}</div>}
+      </>
+    ),
+    /* 3 — goals */
+    () => (
+      <>
+        {signedIn && (
+          <div className="whochip">
+            {user?.user_metadata?.avatar_url
+              ? <img src={user.user_metadata.avatar_url} alt="" />
+              : <Mascot mood="happy" size={26} />}
+            <span>{user?.user_metadata?.full_name || user?.email}</span>
+            <em>signed in</em>
+          </div>
+        )}
         <h1 className="onb-h"><Words text="What do you want your voice to" /> <em>do</em>?</h1>
         <p className="onb-p">Pick everything you're working toward. This sets the topics you'll get.</p>
         <div className="pods">
@@ -4306,11 +4477,11 @@ function OnboardingFlow({ onDone, mic }) {
         <p className="count">{goals.length ? `${goals.length} selected` : "pick at least one"}</p>
       </>
     ),
-    /* 3 — blocks */
+    /* 4 — blocks */
     () => (
       <>
         <h1 className="onb-h"><Words text="What gets in the way?" /></h1>
-        <p className="onb-p">Be honest — this decides what the club watches for first.</p>
+        <p className="onb-p">Be honest — this decides what the club watches for first. Skip it if nothing fits.</p>
         <div className="pods">
           {BLOCKS.map((b, i) => (
             <button key={b.id} className={"pod " + b.shape} data-on={blocks.includes(b.id) ? "1" : "0"}
@@ -4323,18 +4494,6 @@ function OnboardingFlow({ onDone, mic }) {
         {watchers.length > 0 && (
           <p className="count">{watchers.join(" · ")} will be watching for these</p>
         )}
-      </>
-    ),
-    /* 4 — the practice */
-    () => (
-      <>
-        <h1 className="onb-h"><Words text="You don't need an hour." /><br />
-          <em><Words text="You need sixty seconds." delay={0.5} /></em></h1>
-        <Ring pct={1} label="one rep, once a day"><b className="ring2-num">01:00</b></Ring>
-        <p className="onb-p" style={{ textAlign: "center", margin: "10px auto 0" }}>
-          One topic. One minute. No script, no retakes. Four role-players score it the way a real
-          speaking club would.
-        </p>
       </>
     ),
     /* 5 — the live rep */
@@ -4443,56 +4602,71 @@ function OnboardingFlow({ onDone, mic }) {
           The club is open. Word of the day, one table topic, and a debate when you're ready
           for it.
         </p>
+        {err && <div className="onb-err" role="alert">{err}</div>}
       </>
     ),
   ];
 
   const canAdvance =
-    (step === 2 && goals.length === 0) ? false :
-    (step === 5 && recState !== "done") ? false : true;
+    (view === S.GOALS && goals.length === 0) ? false :
+    (view === S.REP && recState !== "done") ? false : true;
 
   const cta = () => {
-    if (step === 5) {
+    if (view === S.GATE) {
+      return (
+        <>
+          <button className="gsign" onClick={signIn} disabled={signingIn || authLoading}>
+            <GoogleMark />
+            {signingIn ? "Opening Google…" : "Continue with Google"}
+          </button>
+          <p className="onb-hint">We only ever read your name, email and picture.</p>
+        </>
+      );
+    }
+    if (view === S.REP) {
       if (recState === "idle") return (
         <>
           <button className="onb-btn" onClick={startRep}>
             <span><Icon name="mic" size={19} /> Start recording</span></button>
-          <p className="onb-hint">no account, nothing uploaded, nothing saved unless you continue</p>
+          <p className="onb-hint">nothing is uploaded — your voice is analysed on the spot and dropped</p>
         </>
       );
       return <button className="onb-btn" onClick={() => finishRep(watch.value())}
         disabled={recState === "typed" && typed.trim().length < 3}>Done — see my baseline</button>;
     }
-    if (step === LAST) return <button className="onb-btn" onClick={complete}>
-      <span>Open the club <Icon name="arrow" size={19} /></span></button>;
-    if (step === 4) return <button className="onb-btn" onClick={next}>
-      <span>Try one now <Icon name="arrow" size={19} /></span></button>;
+    if (view === LAST) return <button className="onb-btn" onClick={complete} disabled={saving}>
+      <span>{saving ? "Saving…" : <>Open the club <Icon name="arrow" size={19} /></>}</span></button>;
+    if (view === S.BLOCKS) return <button className="onb-btn" onClick={next}>
+      <span>{blocks.length ? "Try one now" : "Skip — try one now"} <Icon name="arrow" size={19} /></span></button>;
     return <button className="onb-btn" onClick={next} disabled={!canAdvance}>
       <span>Continue <Icon name="arrow" size={19} /></span></button>;
   };
 
-  const Screen = SCREENS[step];
+  const Screen = SCREENS[view];
+  /* No global skip any more: the account is mandatory, and skipping past the
+     questions would leave the server row half-written. Back is still there. */
+  const canGoBack = view > 0 && view !== S.GATE && view !== S.BASELINE && !(signedIn && view === S.GOALS);
+
   return (
     <div className="onb" data-dawn={dawn ? "1" : "0"}>
-      <div className="onb-sky" style={{ transform: `translate3d(0,${step * -1.4}%,0) scale(${1 + step * 0.02})` }}>
-        <div className="onb-glow g1" style={{ transform: `translate3d(${step * 6}px,${step * -10}px,0)` }} />
-        <div className="onb-glow g2" style={{ transform: `translate3d(${step * -8}px,${step * 8}px,0)` }} />
-        <div className="onb-glow g3" style={{ transform: `translate3d(${step * 4}px,0,0)` }} />
+      <div className="onb-sky" style={{ transform: `translate3d(0,${view * -1.4}%,0) scale(${1 + view * 0.02})` }}>
+        <div className="onb-glow g1" style={{ transform: `translate3d(${view * 6}px,${view * -10}px,0)` }} />
+        <div className="onb-glow g2" style={{ transform: `translate3d(${view * -8}px,${view * 8}px,0)` }} />
+        <div className="onb-glow g3" style={{ transform: `translate3d(${view * 4}px,0,0)` }} />
       </div>
-      <Motes depth={-60 - step * 20} />
+      <Motes depth={-60 - view * 20} />
 
       <div className="onb-stage">
         <div className="onb-top">
-          <button className="onb-back" onClick={back} disabled={step === 0 || step === 6} aria-label="Back">←</button>
+          <button className="onb-back" onClick={back} disabled={!canGoBack} aria-label="Back">←</button>
           <div className="pips">
             {Array.from({ length: LAST + 1 }, (_, i) => (
-              <span key={i} className="pip" data-on={i < step ? "1" : i === step ? "2" : "0"} />
+              <span key={i} className="pip" data-on={i < view ? "1" : i === view ? "2" : "0"} />
             ))}
           </div>
-          {step < LAST && <button className="onb-skip" onClick={skip}>skip</button>}
         </div>
 
-        <div className="onb-body" key={step}>
+        <div className="onb-body" key={view}>
           <Screen />
         </div>
 
@@ -4661,8 +4835,23 @@ function YapApp() {
   const tabRefs = useRef({});
   const [sliderStyle, setSliderStyle] = useState({ left: 0, width: 0 });
   const [tab, setTab] = useState("club");
-  const { user, profile: authProfile, loading: authLoading } = useAuth();
+  const { user, profile: authProfile, loading: authLoading, signInWithGoogle } = useAuth();
   const { meState, meLoading, meError, refreshMeState, setMeState } = useMeState(user);
+
+  /* Free-trial balance for the UI. Hydrated from /api/me/state and then kept
+     current by the server's own answer on every metered call, so the counter
+     reflects what the server actually decided rather than a local tally. It
+     is display only — the enforcement lives in requireReportAccess. */
+  const [liveAccess, setLiveAccess] = useState(null);
+  useEffect(() => onAccessChange(setLiveAccess), []);
+  // The server's answer on the most recent metered call wins over the older
+  // hydrate from /api/me/state; both are server-produced, so this is just
+  // "whichever is newer", not a local tally.
+  const access = liveAccess || meState?.access || null;
+  const userEmail = user?.email;
+  // After a successful upgrade, re-pull server truth so the paywall and the
+  // PRO banner both disappear without a reload.
+  const onPaid = useCallback(() => { refreshMeState(); }, [refreshMeState]);
 
   // Capture the browser's IANA timezone once per session and persist it —
   // every streak/challenge date boundary on the server depends on this being
@@ -4701,7 +4890,18 @@ function YapApp() {
   }), [setAgendaRaw]);
   const [lib] = useState(() => loadLibrary());
   const [profile, setProfile] = useState(() => loadProfile());
-  const [intro, setIntro] = useState(() => !loadProfile().done);
+  /* Onboarding is mandatory and its "done" flag lives on the server, not in
+     localStorage — clearing site data or opening Yap on a second device must
+     not replay the sequence for someone who has already finished it, and must
+     not let anyone past the Google gate either.
+
+     `replayIntro` is the one local override, for the "run it again" link in
+     the club: it forces the flow open for a user who is already onboarded.
+     While auth is still resolving we render nothing rather than guessing —
+     flashing the sign-in screen at a signed-in user is worse than a beat of
+     blank. */
+  const [replayIntro, setReplayIntro] = useState(false);
+  const intro = replayIntro || !user || !authProfile?.onboarding_done;
   const wotd = useMemo(() => wordOfTheDay(lib.words), [lib.words]);
   const mic = useMic();
   const [preselectedTopic, setPreselectedTopic] = useState(null);
@@ -4838,11 +5038,19 @@ function YapApp() {
     return () => clearInterval(timer);
   }, []);
 
+  /* Auth is still resolving: hold the night background rather than guessing
+     which side of the gate this person is on. One beat, no flash either way. */
+  if (authLoading && !replayIntro) {
+    return <div className="grdn"><style>{CSS}</style><style>{ONB_CSS}</style><div className="onb" aria-busy="true" /></div>;
+  }
+
   if (intro) {
     return (
       <div className="grdn">
         <style>{CSS}</style><style>{ONB_CSS}</style>
-        <OnboardingFlow mic={mic} onDone={(p) => { setProfile(p); setIntro(false); mic.stop(); }} />
+        <OnboardingFlow mic={mic} user={user} authProfile={authProfile}
+          authLoading={authLoading} signInWithGoogle={signInWithGoogle}
+          onDone={(p) => { setProfile(p); setReplayIntro(false); mic.stop(); refreshMeState(); }} />
       </div>
     );
   }
@@ -4896,15 +5104,15 @@ function YapApp() {
         <div className="panel" key={tab} role="tabpanel" aria-label={(TABS.find((t) => t.id === tab) || {}).label}>
         {tab === "club" && <Club active={active} setActive={setActive}
           stats={stats} agenda={agenda} go={setTab} wotd={wotd} lib={lib}
-          profile={profile} replay={() => setIntro(true)}
+          profile={profile} replay={() => setReplayIntro(true)}
           user={user} authProfile={authProfile} meState={meState} meLoading={meLoading} meError={meError}
           refreshMeState={refreshMeState} onStartChallenge={startChallenge}
           showLegacyNotice={showLegacyNotice}
           onDismissLegacyNotice={() => { setLegacyDaysAcknowledged(true); setShowLegacyNotice(false); }}
           startWithRandomTopic={(topic) => { setPreselectedTopic(topic); setTab("topics"); }} />}
-        {tab === "debate" && <DebateMode mic={mic} onFinish={onFinish} lib={lib} profile={profile} submitSession={submitSession} />}
-        {tab === "topics" && <TableTopics mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} profile={profile} go={setTab} preselectedTopic={preselectedTopic} clearPreselected={() => setPreselectedTopic(null)} submitSession={submitSession} />}
-        {tab === "vocab" && <Vocabulary mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} />}
+        {tab === "debate" && <DebateMode mic={mic} onFinish={onFinish} lib={lib} profile={profile} submitSession={submitSession} access={access} userEmail={userEmail} onPaid={onPaid} />}
+        {tab === "topics" && <TableTopics mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} profile={profile} go={setTab} preselectedTopic={preselectedTopic} clearPreselected={() => setPreselectedTopic(null)} submitSession={submitSession} access={access} userEmail={userEmail} onPaid={onPaid} />}
+        {tab === "vocab" && <Vocabulary mic={mic} onFinish={onFinish} wotd={wotd} lib={lib} access={access} userEmail={userEmail} onPaid={onPaid} />}
         </div>
 
         <p className="ex" style={{ textAlign: "center", padding: "22px 0 0" }}>
