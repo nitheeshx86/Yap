@@ -4,6 +4,9 @@
 export const DECOR_CSS = `
 .decor-corner{ position:absolute; top:14px; right:16px; font-size:20px; pointer-events:none; animation:decorBob 3.4s ease-in-out infinite; z-index:1; }
 @keyframes decorBob{ 0%,100%{ transform:translateY(0) rotate(-3deg); } 50%{ transform:translateY(-4px) rotate(3deg); } }
+.decor-corner.decor-art{ top:10px; right:12px; line-height:0; filter:drop-shadow(0 4px 8px rgba(31,79,91,.18)); }
+.decor-corner.decor-art img{ display:block; }
+.art-img{ display:inline-block; user-select:none; -webkit-user-drag:none; }
 .lighthouse{ position:absolute; top:12px; right:16px; width:60px; height:44px; pointer-events:none; z-index:1; }
 .lighthouse .lh-tower{ position:absolute; bottom:0; right:0; width:12px; height:32px; background:linear-gradient(180deg,#fff,#EEDBB8); border-radius:3px 3px 0 0; border:1px solid rgba(31,79,91,.15); }
 .lighthouse .lh-cap{ position:absolute; top:0; right:0; width:12px; height:7px; background:#E8674A; border-radius:2px 2px 6px 6px; }
@@ -45,7 +48,8 @@ export const DECOR_CSS = `
 .sum-stat{ background:var(--sand); border:1px solid var(--line); border-radius:18px; padding:11px 6px; }
 .sum-stat b{ display:block; font-family:var(--dis); font-weight:800; font-size:21px; color:var(--ink); font-variant-numeric:tabular-nums; }
 .sum-stat span{ font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink3); }
-.sum-shells{ display:flex; justify-content:center; gap:10px; margin-top:14px; font-size:17px; }
+.sum-shells{ display:flex; align-items:flex-end; justify-content:center; gap:12px; margin-top:14px; font-size:17px; }
+.sum-shells span{ line-height:0; }
 .sum-shells span{ animation:decorBob 3s ease-in-out infinite; }
 .sum-shells span:nth-child(2){ animation-delay:.4s; } .sum-shells span:nth-child(3){ animation-delay:.8s; }
 .sum-actions{ display:grid; gap:9px; margin-top:20px; }

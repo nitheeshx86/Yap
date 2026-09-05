@@ -36,5 +36,12 @@ export const CLUB_CSS = `
 .club-cta:active{animation:clubRipple .5s ease-out}
 .club-shell-pop:hover .club-shell-art{transform:scale(1.08) rotate(-4deg)}
 .club-shell-art{transition:transform .3s cubic-bezier(.2,.9,.3,1)}
-@media (prefers-reduced-motion: reduce){.club-wave,.club-foam,.club-turtle,.club-palm-sway{animation:none}}
+.challenge-shore{display:flex;align-items:flex-end;justify-content:space-between;gap:6px;
+  margin:6px 2px 0;padding-top:8px;border-top:1px solid rgba(31,79,91,.10);opacity:.9;pointer-events:none}
+.challenge-shore img{animation:clubBob 5s ease-in-out infinite}
+.challenge-shore img:nth-child(2){animation-delay:.6s}
+.challenge-shore img:nth-child(3){animation-delay:1.2s}
+.challenge-shore img:nth-child(4){animation-delay:1.8s}
+.challenge-shore img:nth-child(5){animation-delay:2.4s}
+@media (prefers-reduced-motion: reduce){.club-wave,.club-foam,.club-turtle,.club-palm-sway,.challenge-shore img{animation:none}}
 `;

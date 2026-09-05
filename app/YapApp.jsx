@@ -903,8 +903,12 @@ function AnalyzingScreen() {
               <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(10,158,196,.15)" strokeWidth="2" />
               <circle cx="60" cy="60" r="40" fill="none" stroke="rgba(10,158,196,.2)" strokeWidth="2" />
               <circle cx="60" cy="60" r="30" fill="none" stroke="rgba(10,158,196,.25)" strokeWidth="2" />
-              <circle cx="60" cy="60" r="15" fill="#F6C76A" />
             </svg>
+            {/* The rings turn; the shell at the centre stays still and upright
+                so it reads as an object being examined, not a loading dial. */}
+            <span className="ana-core" aria-hidden="true"><Art name="nautilus" size={44} /></span>
+            <span className="ana-orbit ana-orbit1" aria-hidden="true"><Art name="bubbles" size={20} /></span>
+            <span className="ana-orbit ana-orbit2" aria-hidden="true"><Art name="starBlue" size={18} /></span>
           </div>
         </div>
 
@@ -1123,9 +1127,11 @@ function BeachAmbient() {
       <div className="ba-cloud ba-cloud1" />
       <div className="ba-cloud ba-cloud2" />
       <div className="ba-cloud ba-cloud3" />
+      <Art name="sun" size={104} className="ba-sun-art" />
       <div className="ba-island" />
-      <span className="ba-bird ba-bird1">〜</span>
-      <span className="ba-bird ba-bird2">〜</span>
+      <Art name="palms" size={72} className="ba-island-palms" />
+      <Art name="seagulls" size={34} className="ba-bird ba-bird1" />
+      <Art name="seagulls" size={22} className="ba-bird ba-bird2" />
     </div>
   );
 }
@@ -1244,7 +1250,7 @@ function WotdCard({ wotd, used }) {
   return (
     <div className={"card pcard " + (used ? "moss" : "sun")} key="wotd">
       <style>{WOTD_CSS}</style>
-      <CornerDecor emoji={used ? "🏆" : "📖"} />
+      <CornerDecor art={used ? "chest" : "bottle"} />
       <SpeechBubbleHeader
         label="Word of the day"
         sub={used ? "You used it" : "Not used this time"}
@@ -1354,15 +1360,104 @@ function WordBars({ items, tone = "#E8674A", max: capped = 5 }) {
   );
 }
 
+/* The beach art packs in /public/images/assets. Named here once so a card
+   asks for "compass" rather than repeating a path, and so a swapped file only
+   changes this table. Every one of these is decoration — nothing below reads
+   or alters analysis data. */
+const ART = {
+  sign: "/images/assets/set1/01_wooden_sign_single.png",
+  signpost: "/images/assets/set1/02_wooden_signpost_arrows.png",
+  plank: "/images/assets/set1/03_wooden_plank_sign.png",
+  lifeRing: "/images/assets/set1/04_life_ring.png",
+  drink: "/images/assets/set1/05_coconut_drink.png",
+  surfboards: "/images/assets/set1/06_surfboards.png",
+  wave: "/images/assets/set1/07_wave.png",
+  splash: "/images/assets/set1/08_splash.png",
+  droplets: "/images/assets/set1/09_wave_droplets.png",
+  sun: "/images/assets/set1/10_sun.png",
+  seagulls: "/images/assets/set1/11_seagulls.png",
+  coins: "/images/assets/set1/12_coins.png",
+  chest: "/images/assets/set1/13_treasure_chest.png",
+  bottle: "/images/assets/set1/14_message_bottle.png",
+  compass: "/images/assets/set1/15_compass.png",
+  crab: "/images/assets/set1/16_crab.png",
+  wheel: "/images/assets/set1/17_ship_wheel.png",
+  heart: "/images/assets/set1/18_heart_red.png",
+  heartBlue: "/images/assets/set1/19_heart_blue.png",
+  palms: "/images/assets/set1/20_palm_trees.png",
+  hibiscus: "/images/assets/set1/21_hibiscus_flower.png",
+  coconut: "/images/assets/set1/22_coconut.png",
+  starfishSand: "/images/assets/set1/23_starfish_sand.png",
+  sandcastle: "/images/assets/set1/24_sandcastle.png",
+  flipFlops: "/images/assets/set1/25_flip_flops.png",
+
+  starRed: "/images/assets/set2/01_starfish_red_large.png",
+  starOrange: "/images/assets/set2/02_starfish_orange.png",
+  starBlue: "/images/assets/set2/03_starfish_blue.png",
+  starYellow: "/images/assets/set2/04_starfish_yellow.png",
+  starRedSmall: "/images/assets/set2/05_starfish_red_small.png",
+  conchStriped: "/images/assets/set2/06_shell_conch_striped.png",
+  conchOrange: "/images/assets/set2/07_shell_conch_orange.png",
+  spiralSmall: "/images/assets/set2/08_shell_spiral_small.png",
+  scallopCoral: "/images/assets/set2/09_shell_scallop_coral.png",
+  nautilus: "/images/assets/set2/10_shell_nautilus_blue.png",
+  pearl: "/images/assets/set2/11_shell_pearl.png",
+  scallopPink: "/images/assets/set2/12_shell_scallop_pink.png",
+  scallopBlue: "/images/assets/set2/13_shell_scallop_blue.png",
+  scallopGold: "/images/assets/set2/14_shell_scallop_gold.png",
+  scallopWhite: "/images/assets/set2/15_shell_scallop_white.png",
+  scallopRedSmall: "/images/assets/set2/16_shell_scallop_red_small.png",
+  spiralTan: "/images/assets/set2/17_shell_spiral_tan.png",
+  scallopPurple: "/images/assets/set2/18_shell_scallop_purple.png",
+  scallopCyan: "/images/assets/set2/19_shell_scallop_cyan.png",
+  rockGray: "/images/assets/set2/20_rock_gray.png",
+  rockSand: "/images/assets/set2/21_rock_sand.png",
+  bubbles: "/images/assets/set2/22_water_bubbles.png",
+  hibiscus2: "/images/assets/set2/23_hibiscus_flower.png",
+  plumeria: "/images/assets/set2/24_plumeria_flower.png",
+  fern: "/images/assets/set2/25_fern_leaves.png",
+  grassSmall: "/images/assets/set2/26_grass_rocks_small.png",
+  grassLarge: "/images/assets/set2/27_grass_rocks_large.png",
+  starOnSand: "/images/assets/set2/28_starfish_on_sand.png",
+  sandcastle2: "/images/assets/set2/29_sandcastle.png",
+};
+
+/* One piece of art, sized in px. Decorative by default: alt="" keeps it out
+   of the accessibility tree so a screen reader hears the card, not the shell. */
+function Art({ name, size = 22, className, style, alt = "" }) {
+  const src = ART[name];
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      loading="lazy"
+      decoding="async"
+      className={`art-img ${className || ""}`}
+      style={{ width: size, height: size, objectFit: "contain", ...style }}
+    />
+  );
+}
+
 /* Small postcard-corner decorations for report cards. Presentation only —
    none of these read or alter the analysis data. */
 function SailDecor() {
-  return (<><style>{DECOR_CSS}</style><span className="decor-corner" role="img" aria-label="">⛵</span></>);
+  return (<><style>{DECOR_CSS}</style><span className="decor-corner decor-art" aria-hidden="true"><Art name="surfboards" size={30} /></span></>);
 }
 
-/* One emoji pinned to the card's top-right, gently bobbing. Decorative only. */
-function CornerDecor({ emoji }) {
-  return (<><style>{DECOR_CSS}</style><span className="decor-corner" role="img" aria-label="">{emoji}</span></>);
+/* One piece of art pinned to the card's top-right, gently bobbing. The `emoji`
+   prop is still accepted for anything without a matching asset. */
+function CornerDecor({ art, emoji, size = 30 }) {
+  return (
+    <>
+      <style>{DECOR_CSS}</style>
+      {art
+        ? <span className="decor-corner decor-art" aria-hidden="true"><Art name={art} size={size} /></span>
+        : <span className="decor-corner" role="img" aria-label="">{emoji}</span>}
+    </>
+  );
 }
 
 function LighthouseDecor() {
@@ -1592,7 +1687,11 @@ function SummaryCard({ r, topic, onNewTopic, onHome }) {
         <div className="sum-stat"><b>{r.variety}%</b><span>variety</span></div>
       </div>
 
-      <div className="sum-shells"><span>🐚</span><span>⭐</span><span>🐚</span></div>
+      <div className="sum-shells" aria-hidden="true">
+        <span><Art name="scallopPink" size={24} /></span>
+        <span><Art name={band.label === "Excellent" || band.label === "Strong" ? "starYellow" : "starBlue"} size={26} /></span>
+        <span><Art name="nautilus" size={24} /></span>
+      </div>
 
       <div className="sum-actions">
         <button className="btn go" onClick={onNewTopic}>Try a new topic</button>
@@ -2288,7 +2387,7 @@ function PaywallCard({ access, email, onPaid }) {
   const limit = access?.limit ?? 3;
   return (
     <div className="card sun pcard" style={{ marginTop: 12 }}>
-      <CornerDecor emoji="🔒" />
+      <CornerDecor art="sandcastle" />
       <PearlOpenHeader label="Your free reports are used up" />
       <p style={{ fontSize: 15, lineHeight: 1.65 }}>
         You&apos;ve used all {limit} free evaluations. Everything above — your timing, filler
@@ -3125,7 +3224,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
     cards.push(
       <div className="card sun pcard" key="timer">
         <style>{RPT_CSS}</style>
-        <CornerDecor emoji="⏳" />
+        <CornerDecor art="wheel" />
         <RoleHead role={ROLES[0]} />
         <div className={"clock" + (r.seconds > rep.slot.red ? " over" : "")}>{fmt(r.seconds)}</div>
         <div style={{ textAlign: "center", marginBottom: 10 }}>
@@ -3154,7 +3253,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
     cards.push(
       <div className="card coral pcard" key="ah">
         <style>{RPT_CSS}</style>
-        <CornerDecor emoji="🐚" />
+        <CornerDecor art="conchStriped" />
         <RoleHead role={ROLES[1]} />
         <ThumbsBadge ok={aRep.soundPer < 3 && aRep.crutchTotal <= 2} />
         <StatStrip items={[
@@ -3288,7 +3387,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
     cards.push(
       <div className="card sky pcard" key="eval">
         <style>{RPT_CSS}</style>
-        <CornerDecor emoji="🧭" />
+        <CornerDecor art="compass" />
         <RoleHead role={ROLES[3]} />
 
         {/* strongest and weakest measure, named — the two things worth knowing
@@ -3354,7 +3453,7 @@ function TableTopics({ mic, onFinish, wotd, lib, profile, go, preselectedTopic, 
 
     cards.push(
       <div className="card pcard" key="transcript">
-        <CornerDecor emoji="📜" />
+        <CornerDecor art="plank" />
         <div className="eye">The transcript{r.lang && !r.isEnglish ? ` · ${langName(r.lang.primary)}` : ""}</div>
         <div className="script" style={{ marginTop: 8 }}>
           {r.text ? renderClarity(r.text, r) : <span className="ex">Nothing came through. Check your microphone and try again.</span>}
@@ -4057,7 +4156,10 @@ function Club({ active, setActive, stats, agenda, go, wotd, lib, profile, replay
       <section className="relative overflow-hidden rounded-card border border-white/50 bg-gradient-to-b from-warm-sand/70 to-foam/50 p-5 shadow-[0_16px_40px_rgba(10,158,196,.1)] backdrop-blur-xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="m-0 font-[var(--dis)] text-[18px] font-bold text-ink">🌴 7-Day Island Challenge</h2>
+            <h2 className="m-0 flex items-center gap-2 font-[var(--dis)] text-[18px] font-bold text-ink">
+              <Art name="palms" size={26} />
+              7-Day Island Challenge
+            </h2>
             <p className="mb-0 mt-1 text-[12.5px] text-ink/60">Day {challengeCurrentDay} of 7 · Speak daily. Earn rewards.</p>
           </div>
           {onChallenge ? (
@@ -4089,9 +4191,19 @@ function Club({ active, setActive, stats, agenda, go, wotd, lib, profile, replay
           })}
         </div>
 
+        {/* The palms stand on a shared baseline; this is the sand they stand
+            in. Decorative — it carries no day state. */}
+        <div className="challenge-shore" aria-hidden="true">
+          <Art name="grassSmall" size={26} />
+          <Art name="starOnSand" size={22} />
+          <Art name="scallopGold" size={18} />
+          <Art name="rockSand" size={20} />
+          <Art name="grassLarge" size={30} />
+        </div>
+
         <div className="mt-5 flex items-center gap-3 rounded-2xl bg-white/55 p-3">
           <div className="flex flex-1 items-center gap-2">
-            <CoconutArt className="h-8 w-8 shrink-0" />
+            <Art name="coins" size={32} className="shrink-0" />
             <div className="min-w-0">
               <div className="truncate text-[10.5px] font-semibold uppercase tracking-wide text-ink/50">Earned back</div>
               <div className="font-[var(--dis)] text-[15px] font-extrabold text-palm-green">₹{challengeEarned}</div>

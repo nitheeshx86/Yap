@@ -3,8 +3,9 @@
 
 export const BEACH_CSS = `
 .beach-ambient{ position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
-.ba-sun{ position:absolute; top:6%; right:9%; width:120px; height:120px; border-radius:50%;
-  background:radial-gradient(circle, rgba(246,199,106,.5), rgba(246,199,106,0) 70%); animation:baGlow 6s ease-in-out infinite; }
+.ba-sun{ position:absolute; top:6%; right:9%; width:150px; height:150px; border-radius:50%;
+  background:radial-gradient(circle, rgba(246,199,106,.45), rgba(246,199,106,0) 70%); animation:baGlow 6s ease-in-out infinite; }
+.ba-sun-art{ position:absolute; top:8%; right:12%; opacity:.8; animation:baGlow 6s ease-in-out infinite; }
 /* Pill clouds: a rounded body with two puff blobs, drifting across at
    different depths. Pure transforms so they stay GPU-cheap. */
 .ba-cloud{ position:absolute; background:rgba(255,255,255,.62); border-radius:999px; filter:blur(.4px);
@@ -16,7 +17,8 @@ export const BEACH_CSS = `
 .ba-cloud2{ top:16%; left:-40%; width:92px;  height:22px; opacity:.65; animation:baFloat 84s linear infinite 6s, baBobble 9s ease-in-out infinite; }
 .ba-cloud3{ top:23%; left:-30%; width:64px;  height:17px; opacity:.45; animation:baFloat 108s linear infinite 18s, baBobble 11s ease-in-out infinite; }
 .ba-island{ position:absolute; bottom:17%; left:72%; width:90px; height:18px; border-radius:50%; background:rgba(90,174,90,.24); }
-.ba-bird{ position:absolute; color:rgba(31,79,91,.32); font-size:11px; animation:baBird 16s linear infinite; }
+.ba-island-palms{ position:absolute; bottom:calc(17% + 6px); left:calc(72% + 8px); opacity:.42; }
+.ba-bird{ position:absolute; opacity:.38; animation:baBird 16s linear infinite; }
 .ba-bird1{ top:19%; left:18%; animation-delay:0s; }
 .ba-bird2{ top:25%; left:33%; animation-delay:5s; }
 @keyframes baGlow{ 0%,100%{ opacity:.7; } 50%{ opacity:1; } }
@@ -24,7 +26,7 @@ export const BEACH_CSS = `
 @keyframes baBobble{ 0%,100%{ margin-top:0; } 50%{ margin-top:6px; } }
 @keyframes baBird{ 0%{ transform:translate(0,0); } 100%{ transform:translate(40vw,-10px); } }
 @media (prefers-reduced-motion: reduce){
-  .ba-sun,.ba-cloud,.ba-bird{ animation:none; }
+  .ba-sun,.ba-sun-art,.ba-cloud,.ba-bird{ animation:none; }
   .ba-cloud1{ left:8%; } .ba-cloud2{ left:52%; } .ba-cloud3{ left:30%; }
 }
 `;
